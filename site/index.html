@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Atlas Climat Pacifique</title>
+<meta name="description" content="Carte climatique du Pacifique en direct : satellites NASA, pluie, température de l'océan, vent prévu, cyclones et épisodes El Niño en Polynésie française.">
+<meta name="theme-color" content="#0b1216">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="vendor/maplibre/maplibre-gl.css">
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- Panneau des couches -->
+  <aside class="rail" id="rail" aria-label="Couches de la carte">
+    <header class="marque">
+      <div class="marque-ligne">
+        <h1>Atlas Climat Pacifique</h1>
+        <button class="btn-icone rail-fermer" id="rail-fermer" aria-label="Fermer le panneau des couches">✕</button>
+      </div>
+      <p class="marque-sous">Hinova Digital · données satellite NASA en direct</p>
+      <div class="enso" id="enso" hidden>
+        <div class="enso-texte">
+          <span class="etiquette">État ENSO</span>
+          <strong id="enso-phase">—</strong>
+          <span class="mono" id="enso-valeur"></span>
+        </div>
+        <svg class="enso-spark" id="enso-spark" viewBox="0 0 120 32" aria-hidden="true"></svg>
+      </div>
+    </header>
+
+    <section class="groupe">
+      <h2 class="etiquette">Observer</h2>
+      <div class="couches" id="couches" role="radiogroup" aria-label="Couche principale"></div>
+    </section>
+
+    <section class="groupe">
+      <h2 class="etiquette">Superposer</h2>
+      <label class="bascule">
+        <input type="checkbox" id="opt-vent">
+        <span><strong>Vent prévu</strong><small>Flèches sur 72 h, modèles ECMWF / GFS via Open-Meteo</small></span>
+      </label>
+      <div class="echeance" id="echeance" hidden>
+        <input type="range" id="echeance-curseur" min="0" max="23" value="0" step="1" aria-label="Échéance de la prévision de vent">
+        <span class="mono" id="echeance-texte">maintenant</span>
+      </div>
+      <label class="bascule">
+        <input type="checkbox" id="opt-actifs" checked>
+        <span><strong>Cyclones en cours</strong><small>Noms, position et rayons de vent, dans le monde entier (GDACS, mis à jour toutes les 15 min)</small></span>
+      </label>
+      <label class="bascule">
+        <input type="checkbox" id="opt-cyclones">
+        <span><strong>Cyclones historiques</strong><small>Trajectoires depuis 1981 (IBTrACS), animées par saison</small></span>
+      </label>
+      <label class="bascule">
+        <input type="checkbox" id="opt-reperes" checked>
+        <span><strong>Côtes et repères NASA</strong><small>Traits de côte et grandes villes</small></span>
+      </label>
+      <label class="bascule">
+        <input type="checkbox" id="opt-lieux" checked>
+        <span><strong>Noms des pays et des îles</strong><small>Pays, archipels et îles de Polynésie (les îles apparaissent en zoomant)</small></span>
+      </label>
+    </section>
+
+    <section class="groupe" id="groupe-episodes" hidden>
+      <h2 class="etiquette">Atlas ENSO · épisodes</h2>
+      <div id="episodes"></div>
+    </section>
+
+    <footer class="rail-pied">
+      <p>Imagerie : NASA GIBS (GOES-West NOAA, GPM IMERG, GHRSST MUR, AMSR2). Prévisions : Open-Meteo. Normales : NASA POWER. Cyclones : NOAA IBTrACS (historique) et GDACS, Commission européenne / ONU (en cours). Globe : MapLibre.</p>
+      <p>Outil d'aide à l'analyse, pas une prévision officielle. Pour les vigilances : <a href="https://meteo.pf" target="_blank" rel="noopener">meteo.pf</a>.</p>
+    </footer>
+  </aside>
+
+  <!-- Carte -->
+  <main class="scene">
+    <div id="carte" class="carte" role="application" aria-label="Carte du Pacifique"></div>
+    <div id="globe" class="carte" role="application" aria-label="Globe terrestre" hidden></div>
+    <div class="vues" role="group" aria-label="Type de vue">
+      <button type="button" id="vue-carte" aria-pressed="true">Carte</button>
+      <button type="button" id="vue-globe" aria-pressed="false">Globe 3D</button>
+    </div>
+    <button class="btn rail-ouvrir" id="rail-ouvrir" aria-controls="rail">Couches</button>
+    <p class="astuce" id="astuce">Cliquez sur la carte pour analyser un point : pluie, température et vent sur 60 jours + 7 jours de prévision.</p>
+
+    <div class="legende" id="legende" aria-live="polite"></div>
+
+    <div class="temps" id="temps" hidden>
+      <button class="btn-rond" id="lecture" aria-label="Lancer l'animation">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path id="lecture-icone" d="M8 5v14l11-7z"/></svg>
+      </button>
+      <div class="temps-corps">
+        <div class="temps-haut">
+          <span class="mono temps-date" id="temps-date">—</span>
+          <span class="temps-etat" id="temps-etat"></span>
+        </div>
+        <input type="range" id="temps-curseur" min="0" max="0" value="0" step="1" aria-label="Date affichée">
+      </div>
+    </div>
+  </main>
+
+  <!-- Panneau d'analyse -->
+  <aside class="tiroir" id="tiroir" hidden aria-label="Analyse">
+    <div class="tiroir-tete">
+      <div class="onglets" role="tablist">
+        <button role="tab" id="onglet-point" aria-selected="true" aria-controls="vue-point">Point</button>
+        <button role="tab" id="onglet-cyclones" aria-selected="false" aria-controls="vue-cyclones">Cyclones</button>
+      </div>
+      <button class="btn-icone" id="tiroir-fermer" aria-label="Fermer le panneau d'analyse">✕</button>
+    </div>
+
+    <section class="vue" id="vue-point" role="tabpanel" aria-labelledby="onglet-point">
+      <p class="vide" id="point-vide">Cliquez n'importe où sur la carte pour afficher l'évolution de la pluie, de la température et du vent à cet endroit.</p>
+      <div id="point-contenu" hidden>
+        <h3 class="mono" id="point-coord"></h3>
+        <div class="tuiles" id="point-tuiles"></div>
+        <figure class="graphe"><figcaption>Pluie par jour (mm)</figcaption><canvas id="g-pluie"></canvas></figure>
+        <figure class="graphe"><figcaption>Température min / max (°C)</figcaption><canvas id="g-temp"></canvas></figure>
+        <figure class="graphe"><figcaption>Vent max et rafales (nœuds)</figcaption><canvas id="g-vent"></canvas></figure>
+        <p class="note" id="point-note"></p>
+      </div>
+    </section>
+
+    <section class="vue" id="vue-cyclones" role="tabpanel" aria-labelledby="onglet-cyclones" hidden>
+      <p class="vide" id="cyc-vide" hidden>Les données cycloniques de l'atlas ne sont pas encore publiées. Lancez <code>07_export_web.py</code>, puis redéployez le site.</p>
+      <div id="cyc-contenu" hidden>
+        <label class="champ">Saison cyclonique
+          <select id="cyc-saison"></select>
+        </label>
+        <div class="saison-info" id="cyc-info"></div>
+        <div class="cyc-lecture">
+          <button class="btn" id="cyc-lecture">Animer la saison</button>
+          <span class="mono" id="cyc-date"></span>
+        </div>
+        <ul class="cyc-liste" id="cyc-liste"></ul>
+        <figure class="graphe"><figcaption>Systèmes en Polynésie par saison (couleur = phase ENSO). Cliquez une barre.</figcaption><canvas id="g-saisons"></canvas></figure>
+        <div class="echelle" id="cyc-echelle"></div>
+      </div>
+    </section>
+  </aside>
+</div>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="vendor/chart.umd.js"></script>
+<script src="assets/couches.js"></script>
+<script src="assets/lieux.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
