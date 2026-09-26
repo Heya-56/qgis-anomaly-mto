@@ -1,0 +1,11 @@
+{
+  // Configuration Cloudflare du site Atlas Climat Pacifique
+  "name": "qgis-anomaly-mto",
+  "main": "worker.js",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./site",
+    "binding": "ASSETS"
+  },
+  "observability": { "enabled": true }
+}
