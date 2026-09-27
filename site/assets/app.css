@@ -333,3 +333,31 @@ input[type="range"] { accent-color: var(--accent); width: 100%; }
 /* Sans réseau : on masque les images NASA (indisponibles) pour laisser voir le fond hors ligne. */
 .sans-reseau .leaflet-tile-pane, .sans-reseau .leaflet-donnees-pane, .sans-reseau .leaflet-reperes-pane { visibility: hidden; }
 .legende-bloc .pourquoi { justify-self: start; }
+
+/* ---------- Exports ---------- */
+.exports { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.exports .btn { font-size: 13px; }
+.graphe figcaption { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.exp-png, .legende-exports button {
+  flex: none; padding: 1px 8px; border: 1px solid var(--ligne); border-radius: 999px; background: transparent;
+  color: var(--texte-2); font-size: 11px; font-weight: 600; cursor: pointer;
+}
+.exp-png:hover, .legende-exports button:hover { color: var(--accent); border-color: var(--accent); }
+.legende-exports { display: flex; flex-wrap: wrap; gap: 6px; }
+.impression-entete { display: none; }
+
+/* ---------- Rapport PDF (impression) ---------- */
+@media print {
+  @page { size: A4 portrait; margin: 12mm; }
+  html, body { height: auto; background: #0b1216 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body.impression-point .app { display: block; padding: 0; }
+  body.impression-point .rail, body.impression-point .scene, body.impression-point .tiroir-tete,
+  body.impression-point .exports, body.impression-point .exp-png, body.impression-point .notice,
+  body.impression-point #vue-cyclones, body.impression-point #point-vide { display: none !important; }
+  body.impression-point .tiroir { display: block !important; position: static; width: 100%; max-height: none; overflow: visible; border: 0; box-shadow: none; }
+  body.impression-point .impression-entete { display: block; color: #e8eef0; margin-bottom: 8mm; }
+  .impression-entete h1 { font-size: 18pt; margin: 0 0 2mm; }
+  .impression-entete p { margin: 0 0 1.5mm; font-size: 9.5pt; color: #9bb0b8; }
+  .impression-entete .avertissement { color: #f2b445; }
+  body.impression-point .graphe { break-inside: avoid; }
+}

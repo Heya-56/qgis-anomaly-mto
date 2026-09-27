@@ -2,13 +2,13 @@
    - Coquille de l'application : mise en cache à l'installation, servie hors ligne.
    - Données (data/*.json, /api/*) : réseau d'abord, sinon dernière copie connue.
    - Tuiles satellite NASA GIBS : non stockées (réponses opaques trop lourdes pour le stockage d'un téléphone). */
-const VERSION = "atlas-pacifica-v4";
+const VERSION = "atlas-pacifica-v5";
 const COQUILLE = `${VERSION}-coquille`;
 const DONNEES = `${VERSION}-donnees`;
 
 const FICHIERS = [
   "./", "manifest.webmanifest",
-  "assets/app.css", "assets/app.js", "assets/couches.js", "assets/fiches.js", "assets/lieux.js", "assets/pwa.js",
+  "assets/app.css", "assets/app.js", "assets/couches.js", "assets/fiches.js", "assets/export.js", "assets/lieux.js", "assets/pwa.js",
   "vendor/leaflet/leaflet.css", "vendor/leaflet/leaflet.js", "vendor/chart.umd.js",
   "icones/icone-32.png", "icones/icone-192.png", "icones/logo-128.webp",
   "vendor/fonts/ibm-plex-sans-condensed-latin-400-normal.woff2", "vendor/fonts/ibm-plex-sans-condensed-latin-500-normal.woff2",

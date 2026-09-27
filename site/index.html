@@ -140,9 +140,13 @@
       <div id="point-contenu" hidden>
         <h3 class="mono" id="point-coord"></h3>
         <div class="tuiles" id="point-tuiles"></div>
-        <figure class="graphe"><figcaption>Pluie par jour (mm)</figcaption><canvas id="g-pluie"></canvas></figure>
-        <figure class="graphe"><figcaption>Température min / max (°C)</figcaption><canvas id="g-temp"></canvas></figure>
-        <figure class="graphe"><figcaption>Vent max et rafales (nœuds)</figcaption><canvas id="g-vent"></canvas></figure>
+        <div class="exports" role="group" aria-label="Télécharger">
+          <button type="button" class="btn" id="exp-point-pdf">Rapport PDF</button>
+          <button type="button" class="btn" id="exp-point-csv">Données CSV</button>
+        </div>
+        <figure class="graphe"><figcaption>Pluie par jour (mm)<button type="button" class="exp-png" data-graphe="g-pluie" aria-label="Télécharger le graphique de pluie en image">PNG</button></figcaption><canvas id="g-pluie"></canvas></figure>
+        <figure class="graphe"><figcaption>Température min / max (°C)<button type="button" class="exp-png" data-graphe="g-temp" aria-label="Télécharger le graphique de température en image">PNG</button></figcaption><canvas id="g-temp"></canvas></figure>
+        <figure class="graphe"><figcaption>Vent max et rafales (nœuds)<button type="button" class="exp-png" data-graphe="g-vent" aria-label="Télécharger le graphique de vent en image">PNG</button></figcaption><canvas id="g-vent"></canvas></figure>
         <p class="note" id="point-note"></p>
       </div>
     </section>
@@ -159,7 +163,11 @@
           <span class="mono" id="cyc-date"></span>
         </div>
         <ul class="cyc-liste" id="cyc-liste"></ul>
-        <figure class="graphe"><figcaption>Systèmes en Polynésie par saison (couleur = phase ENSO). Cliquez une barre.</figcaption><canvas id="g-saisons"></canvas></figure>
+        <div class="exports" role="group" aria-label="Télécharger">
+          <button type="button" class="btn" id="exp-saison-csv">Trajectoires de la saison (CSV)</button>
+          <button type="button" class="btn" id="exp-saisons-csv">Toutes les saisons et ENSO (CSV)</button>
+        </div>
+        <figure class="graphe"><figcaption>Systèmes en Polynésie par saison (couleur = phase ENSO). Cliquez une barre.<button type="button" class="exp-png" data-graphe="g-saisons" aria-label="Télécharger le graphique des saisons en image">PNG</button></figcaption><canvas id="g-saisons"></canvas></figure>
         <div class="echelle" id="cyc-echelle"></div>
       </div>
     </section>
@@ -173,6 +181,8 @@
     <button type="button" class="btn" id="notice-ok">J'ai compris</button>
   </span>
 </p>
+
+<div class="impression-entete" id="impression-entete" aria-hidden="true"></div>
 
 <dialog class="fenetre" id="fiche" aria-labelledby="fiche-titre">
   <div class="fenetre-tete">
@@ -210,6 +220,7 @@
 <script src="assets/couches.js"></script>
 <script src="assets/fiches.js"></script>
 <script src="assets/lieux.js"></script>
+<script src="assets/export.js"></script>
 <script src="assets/app.js"></script>
 <script src="assets/pwa.js"></script>
 </body>

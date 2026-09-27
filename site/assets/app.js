@@ -250,6 +250,61 @@
   $("lecture").addEventListener("click", () => (etat.lecture ? (arreter(), majEtat()) : lancer()));
   $("temps-curseur").addEventListener("input", (e) => { arreter(); afficher(Number(e.target.value)); });
 
+  /* Export d'une couche de modèle : image de l'échéance affichée (avec légende) ou valeurs sur la grille de 1°. */
+  document.addEventListener("click", async (e) => {
+    const b = e.target.closest && e.target.closest("[data-export]");
+    if (!b || !etat.modele) return;
+    const m = etat.modele, f = m.images[etat.index], p = m.produit;
+    const base = `${etat.couche.modele}_run${m.source.run_utc.replace(/[^0-9]/g, "").slice(0, 10)}_plus${f.ech}h`;
+    const source = `${m.source.source.nom}, run du ${m.source.run_utc} · ${m.source.source.credit}`;
+    const titre = `${p.titre} (${p.unite}) · ${libelleEcheance(f, m.source.run_utc)}`;
+    if (b.dataset.export === "modele-png") {
+      const img = new Image();
+      img.onload = async () => {
+        // image du modèle + côtes et îles (Natural Earth), dans la même projection Web Mercator
+        const k = Math.max(2, Math.round(1100 / img.width));
+        const c = document.createElement("canvas");
+        c.width = img.width * k; c.height = img.height * k;
+        const x = c.getContext("2d");
+        x.fillStyle = "#16242a"; x.fillRect(0, 0, c.width, c.height);
+        x.imageSmoothingEnabled = false; x.drawImage(img, 0, 0, c.width, c.height);
+        const [[s, o], [n, e]] = p.bornes;
+        const my = (lat) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
+        const px = (lon) => ((lon - o) / (e - o)) * c.width;
+        const py = (lat) => ((my(n) - my(lat)) / (my(n) - my(s))) * c.height;
+        try {
+          const terres = await lireJson("data/terres-pacifique.geojson");
+          x.strokeStyle = "rgba(232,238,240,.9)"; x.lineWidth = 1; x.fillStyle = "rgba(11,18,22,.55)";
+          terres.features.forEach((ft) => {
+            const g = ft.geometry, polys = g.type === "MultiPolygon" ? g.coordinates : [g.coordinates];
+            polys.forEach((poly) => { x.beginPath(); poly[0].forEach(([lo, la], i) => (i ? x.lineTo(px(lo), py(la)) : x.moveTo(px(lo), py(la))));
+              x.closePath(); x.fill(); x.stroke(); });
+          });
+        } catch (err) { /* sans fond de côtes */ }
+        Export.png(base, { titre, image: c, source, legende: p.legende.map((l) => ({ couleur: l.couleur, libelle: l.libelle })) });
+      };
+      img.src = f.url;
+      return;
+    }
+    const fg = m.source.fichiers.find((x) => x.produit === "grilles");
+    if (!fg) return;
+    b.disabled = true;
+    try {
+      const g = await lireJson(fg.url);
+      const prod = g.produits && g.produits[etat.couche.modele];
+      const k = g.echeances.indexOf(f.ech);
+      const v = prod && prod.valeurs[k];
+      if (!v) return;
+      const lignes = [];
+      v.forEach((ligne, j) => ligne.forEach((x, i) => {
+        if (x == null) return;
+        lignes.push([+(g.lat0 - j * g.pas).toFixed(2), +normLon(g.lon0 + i * g.pas).toFixed(2), x]);
+      }));
+      Export.csv(base, { titre: `${titre} — grille régulière de 1°`, sources: [source],
+        colonnes: ["latitude", "longitude", `valeur_${p.unite.replace("/", "_").replace("%", "pct").replace(/[^a-zA-Z0-9_]/g, "")}`], lignes });
+    } catch (err) { /* grille indisponible */ } finally { b.disabled = false; }
+  });
+
   /* ================= Fiches « Pourquoi ? » ================= */
   const FICHES = window.FICHES || {};
   const boutonFiche = (c) => (c && c.fiche && FICHES[c.fiche]
@@ -308,7 +363,8 @@
           .map((x) => `<span><i style="background:${x.couleur}"></i>${x.libelle}</span>`).join("")}</div>
           <p>${c.aide}</p><p>${p.limites}</p>
           <p>Source : ${s.source.nom}, run du ${s.run_utc.slice(8, 10)}/${s.run_utc.slice(5, 7)} à ${s.run_utc.slice(11, 13)} h UTC. ${s.source.credit}.</p>
-          ${vueGlobe() ? "<p>Couche visible en vue Carte.</p>" : ""}${boutonFiche(c)}</div>`);
+          ${vueGlobe() ? "<p>Couche visible en vue Carte.</p>" : ""}${boutonFiche(c)}
+          <div class="legende-exports"><button type="button" data-export="modele-png">Image PNG</button><button type="button" data-export="modele-csv">Grille CSV (1°)</button></div></div>`);
       }
     }
     if ($("opt-vent").checked) {
@@ -430,6 +486,7 @@
   });
 
   let marqueur = null;
+  let dernierPoint = null;
   carte.on("click", (e) => analyserPoint(e.latlng));
 
   async function analyserPoint(ll) {
@@ -495,10 +552,44 @@
       { label: "Rafales", data: d.wind_gusts_10m_max, borderColor: COUL.accent, pointRadius: 0, borderWidth: 1.5, segment: { borderDash: pointille } }
     ] }, options: oVent, plugins: [repereAujourdhui] });
 
+    dernierPoint = { lat, lon, jours: d.time, d, normale, periode, idx, coord: $("point-coord").textContent };
     $("point-note").textContent = "Les 60 derniers jours sont une analyse de modèles météo (Open-Meteo), pas des mesures de station. " +
       "En doré et en pointillé : la prévision. " +
       (normale ? `Normale : climatologie NASA POWER${periode}, moyenne du mois.` : "Normale NASA POWER indisponible pour le moment.");
   }
+
+  /* ================= Exports (CSV, PNG, rapport PDF) ================= */
+  const SOURCES_POINT = ["Open-Meteo (modèles ECMWF / GFS), licence CC BY 4.0, usage non commercial",
+    "NASA POWER (normales climatologiques)"];
+  $("exp-point-csv").addEventListener("click", () => {
+    const p = dernierPoint; if (!p) return;
+    const d = p.d;
+    Export.csv(`point_${p.lat.toFixed(2)}_${p.lon.toFixed(2)}`, {
+      titre: `Analyse d'un point : ${p.coord} (60 jours passés + 7 jours de prévision)`, sources: SOURCES_POINT,
+      colonnes: ["date", "type", "pluie_mm", "pluie_normale_mm_jour", "temp_min_c", "temp_max_c", "vent_max_kt", "rafales_kt"],
+      lignes: p.jours.map((t, i) => [t, i >= p.idx ? "prevision" : "analyse", d.precipitation_sum[i],
+        p.normale ? p.normale[i] : null, d.temperature_2m_min[i], d.temperature_2m_max[i], d.wind_speed_10m_max[i], d.wind_gusts_10m_max[i]])
+    });
+  });
+  $("exp-point-pdf").addEventListener("click", () => {
+    const p = dernierPoint; if (!p) return;
+    Export.rapport({ titre: `Analyse du point ${p.coord}`, sousTitre: "Pluie, température et vent : 60 jours passés et 7 jours de prévision",
+      sources: SOURCES_POINT, avant: $("vue-point") });
+  });
+  const TITRES_GRAPHES = { "g-pluie": "Pluie par jour (mm)", "g-temp": "Température min / max (°C)",
+    "g-vent": "Vent max et rafales (nœuds)", "g-saisons": "Systèmes tropicaux en Polynésie par saison et phase ENSO" };
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest && e.target.closest(".exp-png");
+    if (!b) return;
+    const g = Chart.getChart($(b.dataset.graphe));
+    if (!g) return;
+    const saisons = b.dataset.graphe === "g-saisons";
+    const lieu = !saisons && dernierPoint ? ` · ${dernierPoint.coord}` : "";
+    Export.png(b.dataset.graphe.slice(2) + (dernierPoint && !saisons ? `_${dernierPoint.lat.toFixed(2)}_${dernierPoint.lon.toFixed(2)}` : ""), {
+      titre: TITRES_GRAPHES[b.dataset.graphe] + lieu, image: g.canvas,
+      source: saisons ? "NOAA IBTrACS v04r01 et NOAA CPC (ONI), traitement Atlas ENSO" : SOURCES_POINT.join(" ; ")
+    });
+  });
 
   /* ================= Cyclones (Atlas ENSO) ================= */
   const cyc = { donnees: null, saisons: null, groupe: L.layerGroup(), minuterie: null, saison: null, graphe: null };
@@ -544,6 +635,25 @@
     });
     afficherSaison(Number(sel.value));
   }
+
+  $("exp-saison-csv").addEventListener("click", () => {
+    if (!cyc.donnees || cyc.saison == null) return;
+    const lignes = [];
+    cyc.donnees.filter((x) => x.saison === cyc.saison).forEach((x) =>
+      x.points.forEach((p) => lignes.push([x.nom, x.saison, p[0], p[1], p[2], p[3]])));
+    Export.csv(`cyclones_saison_${lib(cyc.saison)}`, {
+      titre: `Trajectoires des systèmes tropicaux en Polynésie, saison ${lib(cyc.saison)} (positions toutes les 6 h)`,
+      sources: ["NOAA IBTrACS v04r01 (Knapp et al. 2010), domaine public"],
+      colonnes: ["nom", "saison", "date_utc", "latitude", "longitude_pacifique", "vent_kt"], lignes });
+  });
+  $("exp-saisons-csv").addEventListener("click", () => {
+    if (!cyc.saisons) return;
+    Export.csv("saisons_cycloniques_enso", {
+      titre: "Systèmes tropicaux en Polynésie française par saison et état ENSO",
+      sources: ["NOAA IBTrACS v04r01, domaine public", "NOAA CPC : ONI et indices Niño (sstoi.indices), domaine public"],
+      colonnes: ["saison", "oni_dec_fev_c", "phase", "type_el_nino", "nino3_moins_nino4_c", "systemes", "systemes_64kt_ou_plus"],
+      lignes: cyc.saisons.map((s) => [s.saison, s.oni_djf, s.phase, s.type, s.n3_moins_n4, s.systemes, s.systemes_64kt]) });
+  });
 
   function segments(points, jusqua) {
     const out = [];
