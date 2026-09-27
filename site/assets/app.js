@@ -1,4 +1,4 @@
-/* Atlas Climat Pacifique — carte climatique en direct (JAMstack, sans serveur ni clé d'API) */
+/* Atlas Pacifica — atlas climatologique du Pacifique en direct (JAMstack + Worker Cloudflare, sans clé d'API) */
 (() => {
   "use strict";
 
@@ -522,6 +522,20 @@
       der.map(([, x], i) => { const h = (Math.abs(x) / max) * (H / 2 - 1);
         return `<rect x="${(i * bw + .3).toFixed(1)}" y="${(x > 0 ? H / 2 - h : H / 2).toFixed(1)}" width="${(bw - .6).toFixed(1)}" height="${h.toFixed(1)}" fill="${x >= 0 ? COUL.chaud : COUL.froid}"/>`; }).join("");
     $("enso").hidden = false;
+    chargerTypeNino();
+  }
+
+  /* Tendance du type d'El Niño : Niño3 − Niño4 sur les 3 derniers mois (Worker /api/enso-type, NOAA CPC).
+     Indicatif : le type retenu par l'atlas est calculé sur déc.-fév. (Kug et al. 2009). */
+  async function chargerTypeNino() {
+    let t;
+    try { t = await lireJson("api/enso-type"); } catch (e) { return; }
+    if (!t || typeof t.gradient !== "number") return;
+    const libelles = { Est: "tendance Est (Pacifique oriental)", Centre: "tendance Centre (Pacifique central)", Mixte: "type mixte" };
+    const el = $("enso-type");
+    el.textContent = `Niño3−Niño4 ${signe(t.gradient, 2)} °C · ${libelles[t.tendance] || t.tendance}`;
+    el.title = `Moyenne ${t.mois.map((m) => m.mois).join(", ")}. Seuils : > ${nombre(t.seuils.est, 1)} Est, < ${nombre(t.seuils.centre, 1)} Centre. Source : ${t.source}. Indicatif : le type officiel de l'atlas se calcule sur déc.-fév.`;
+    el.hidden = false;
   }
 
 
@@ -586,10 +600,10 @@
     });
   }
   function blocActifs() {
-    if (actifs.erreur) return `<div class="legende-bloc"><strong>Cyclones en cours</strong><p>Service indisponible ici. Il fonctionne une fois le site déployé sur Cloudflare Pages.</p></div>`;
+    if (actifs.erreur) return `<div class="legende-bloc"><strong>Cyclones en cours</strong><p>Service momentanément indisponible. Nouvel essai automatique dans 15 minutes.</p></div>`;
     if (!actifs.donnees) return "";
     const l = actifs.donnees.cyclones;
-    if (!l.length) return `<div class="legende-bloc"><strong>Cyclones en cours</strong><p>Aucun cyclone tropical actif dans le monde en ce moment (GDACS).</p></div>`;
+    if (!l.length) return `<div class="legende-bloc"><strong>Cyclones en cours</strong><p>Aucun cyclone tropical actif dans le monde ces dernières 48 h (GDACS).</p></div>`;
     return `<div class="legende-bloc"><strong>Cyclones en cours (${l.length})</strong><div class="legende-cases">${l.map((c) =>
       `<span><i style="background:${COUL_ALERTE[c.alerte] || COUL.accent}"></i>${libelleActif(c)}</span>`).join("")}</div>
       <p>Couleur = niveau d'alerte GDACS. Zones colorées = rayons de vent. Source : GDACS (UE / ONU).</p></div>`;

@@ -1,0 +1,19 @@
+{
+  "name": "Atlas Pacifica",
+  "short_name": "Atlas Pacifica",
+  "description": "Atlas climatologique du Pacifique et de la Polynésie française : satellites NASA, océan, pluie, vent, cyclones et ENSO. Outil d'analyse, pas une prévision officielle.",
+  "lang": "fr",
+  "id": "/",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#021428",
+  "theme_color": "#0b1216",
+  "categories": ["weather", "education", "utilities"],
+  "icons": [
+    { "src": "icones/icone-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icones/icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icones/icone-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

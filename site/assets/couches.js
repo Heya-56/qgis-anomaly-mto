@@ -26,13 +26,13 @@ window.COUCHES = [
     aide: "Image quotidienne produite par la NASA à partir des estimations toutes les 30 minutes."
   },
   {
-    id: "sst", nom: "Température de l'océan", detail: "Surface, 1 km, quotidienne (°C)",
+    id: "sst", nom: "SST · température de l'océan", detail: "Valeur absolue en surface, 1 km, quotidienne (°C)",
     gibs: "GHRSST_L4_MUR_Sea_Surface_Temperature", format: "image/png", pas: "1j", latence_j: 2, images: 30,
     legende: "GHRSST_Sea_Surface_Temperature", source: "GHRSST MUR (NASA JPL) via NASA GIBS",
     aide: "Au-dessus de 26,5 °C, l'océan fournit assez d'énergie pour qu'un cyclone se forme."
   },
   {
-    id: "sstAnom", nom: "Anomalie de l'océan", detail: "Écart à la normale (°C)",
+    id: "sstAnom", nom: "SST ANOMALY · écart à la normale", detail: "Différence avec la normale climatologique (°C)",
     gibs: "GHRSST_L4_MUR_Sea_Surface_Temperature_Anomalies", format: "image/png", pas: "1j", latence_j: 2, images: 30,
     legende: "GHRSST_Sea_Surface_Temperature_Anomalies", source: "GHRSST MUR (NASA JPL) via NASA GIBS",
     aide: "Rouge = plus chaud que d'habitude, bleu = plus froid. C'est la couche qui montre El Niño et La Niña."

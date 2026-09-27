@@ -3,9 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Atlas Climat Pacifique</title>
-<meta name="description" content="Carte climatique du Pacifique en direct : satellites NASA, pluie, température de l'océan, vent prévu, cyclones et épisodes El Niño en Polynésie française.">
+<title>Atlas Pacifica</title>
+<meta name="description" content="Atlas Pacifica : atlas climatologique du Pacifique en direct : satellites NASA, pluie, température de l'océan, vent prévu, cyclones et épisodes El Niño en Polynésie française.">
 <meta name="theme-color" content="#0b1216">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="icones/icone-32.png">
+<link rel="apple-touch-icon" href="icones/icone-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Atlas Pacifica">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&display=swap">
@@ -20,15 +26,20 @@
   <aside class="rail" id="rail" aria-label="Couches de la carte">
     <header class="marque">
       <div class="marque-ligne">
-        <h1>Atlas Climat Pacifique</h1>
+        <div class="marque-titre">
+          <img class="marque-logo" src="icones/logo-128.webp" width="44" height="44" alt="">
+          <h1>Atlas Pacifica</h1>
+        </div>
         <button class="btn-icone rail-fermer" id="rail-fermer" aria-label="Fermer le panneau des couches">✕</button>
       </div>
-      <p class="marque-sous">Hinova Digital · données satellite NASA en direct</p>
+      <p class="marque-sous">Atlas climatologique du Pacifique · Hinova Digital</p>
+      <button type="button" class="btn installer" id="installer" hidden>Installer l'application</button>
       <div class="enso" id="enso" hidden>
         <div class="enso-texte">
           <span class="etiquette">État ENSO</span>
           <strong id="enso-phase">—</strong>
           <span class="mono" id="enso-valeur"></span>
+          <span class="mono enso-type" id="enso-type" hidden></span>
         </div>
         <svg class="enso-spark" id="enso-spark" viewBox="0 0 120 32" aria-hidden="true"></svg>
       </div>
@@ -74,12 +85,13 @@
 
     <footer class="rail-pied">
       <p>Imagerie : NASA GIBS (GOES-West NOAA, GPM IMERG, GHRSST MUR, AMSR2). Prévisions : Open-Meteo. Normales : NASA POWER. Cyclones : NOAA IBTrACS (historique) et GDACS, Commission européenne / ONU (en cours). Globe : MapLibre.</p>
-      <p>Outil d'aide à l'analyse, pas une prévision officielle. Pour les vigilances : <a href="https://meteo.pf" target="_blank" rel="noopener">meteo.pf</a>.</p>
+      <p>Outil d'analyse climatologique, pas une prévision ni une alerte officielle. Pour les vigilances : <a href="https://meteo.pf" target="_blank" rel="noopener">meteo.pf</a>.</p>
     </footer>
   </aside>
 
   <!-- Carte -->
   <main class="scene">
+    <p class="hors-ligne" id="hors-ligne" role="status" hidden>Hors ligne : la carte affiche les dernières données enregistrées sur cet appareil. Les images satellite reviendront avec la connexion.</p>
     <div id="carte" class="carte" role="application" aria-label="Carte du Pacifique"></div>
     <div id="globe" class="carte" role="application" aria-label="Globe terrestre" hidden></div>
     <div class="vues" role="group" aria-label="Type de vue">
@@ -151,5 +163,6 @@
 <script src="assets/couches.js"></script>
 <script src="assets/lieux.js"></script>
 <script src="assets/app.js"></script>
+<script src="assets/pwa.js"></script>
 </body>
 </html>

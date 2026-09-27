@@ -1,4 +1,4 @@
-# Atlas Climat Pacifique — site web
+# Atlas Pacifica — site web
 
 Site 100 % statique (JAMstack) : aucune base de données, aucun serveur, aucune clé d'API.
 
