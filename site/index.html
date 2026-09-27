@@ -37,8 +37,18 @@
           <strong id="enso-phase">—</strong>
           <span class="mono" id="enso-valeur"></span>
           <span class="mono enso-type" id="enso-type" hidden></span>
+          <button type="button" class="pourquoi" data-fiche="enso">Pourquoi ?</button>
         </div>
         <svg class="enso-spark" id="enso-spark" viewBox="0 0 120 32" aria-hidden="true"></svg>
+      </div>
+      <div class="enso mjo" id="mjo" hidden>
+        <div class="enso-texte">
+          <span class="etiquette">MJO</span>
+          <strong id="mjo-etat">—</strong>
+          <span class="mono" id="mjo-valeur"></span>
+          <button type="button" class="pourquoi" data-fiche="mjo">Pourquoi ?</button>
+        </div>
+        <svg class="mjo-diagramme" id="mjo-diagramme" viewBox="-3 -3 6 6" role="img" aria-label="Diagramme de phase de la MJO, 40 derniers jours"></svg>
       </div>
     </header>
 
@@ -164,6 +174,14 @@
   </span>
 </p>
 
+<dialog class="fenetre" id="fiche" aria-labelledby="fiche-titre">
+  <div class="fenetre-tete">
+    <h2 id="fiche-titre">—</h2>
+    <button type="button" class="btn-icone" id="fiche-fermer" aria-label="Fermer">✕</button>
+  </div>
+  <div class="fenetre-corps" id="fiche-corps"></div>
+</dialog>
+
 <dialog class="fenetre" id="confidentialite" aria-labelledby="conf-titre">
   <div class="fenetre-tete">
     <h2 id="conf-titre">Confidentialité et mentions légales</h2>
@@ -190,6 +208,7 @@
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/chart.umd.js"></script>
 <script src="assets/couches.js"></script>
+<script src="assets/fiches.js"></script>
 <script src="assets/lieux.js"></script>
 <script src="assets/app.js"></script>
 <script src="assets/pwa.js"></script>

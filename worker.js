@@ -2,6 +2,7 @@
    Les fichiers du site (dossier site/) sont servis directement par Cloudflare ; ce Worker ne répond qu'aux routes /api/.
    - /api/cyclones-actifs : relais GDACS (UE / ONU), cyclones actifs des dernières 48 h, cache 15 min
    - /api/enso-type       : gradient Niño3 − Niño4 des 3 derniers mois (NOAA CPC), cache 12 h
+   - /api/mjo             : oscillation de Madden-Julian (indice ROMI temps réel, NOAA PSL), 40 derniers jours, cache 6 h
    - /api/catalogue       : derniers produits de modèles disponibles, avec leur traçabilité (base D1)
    - /donnees/<clé>       : fichiers de produits stockés dans R2 (images, grilles)
    Tâche planifiée (toutes les heures) : recopie dans R2 les produits publiés par GitHub Actions
@@ -159,7 +160,7 @@ async function synchroniser(env) {
   if (deja) { await journal(env, source, "rien_de_neuf", runId); return; }
 
   const lignes = [];
-  for (const f of cat.fichiers.slice(0, 40)) {
+  for (const f of cat.fichiers.slice(0, 45)) {
     const nom = String(f.nom || "");
     const cle = `modeles/${source}/${runCompact}/${nom}`;
     if (!CLE_SURE.test(cle)) { await journal(env, source, "erreur", `nom refusé : ${nom}`); return; }
@@ -221,9 +222,42 @@ async function fichierDonnees(env, chemin) {
     "x-content-type-options": "nosniff", "cross-origin-resource-policy": "same-origin", "etag": obj.httpEtag } });
 }
 
+/* MJO : indice ROMI temps réel (Kiladis et al. 2014), NOAA PSL. Colonnes : année mois jour heure PC1 PC2 amplitude.
+   Conversion en équivalent RMM (Wheeler et Hendon 2004) indiquée par la NOAA : RMM1 ≈ PC2, RMM2 ≈ −PC1. */
+const PSL_ROMI = "https://psl.noaa.gov/mjo/mjoindex/romi.cpcolr.1x.txt";
+const REGIONS_MJO = { 1: "Afrique et ouest de l'océan Indien", 2: "Océan Indien", 3: "Océan Indien est",
+  4: "Continent maritime (Indonésie)", 5: "Continent maritime (Indonésie)", 6: "Pacifique ouest",
+  7: "Pacifique ouest et central", 8: "Hémisphère occidental et Afrique" };
+function phaseRmm(x, y) {
+  const a = Math.atan2(y, x) * 180 / Math.PI;   // −180..180
+  return Math.min(8, Math.floor((a + 180) / 45) + 1);
+}
+async function mjo() {
+  let texte;
+  try {
+    const r = await fetch(PSL_ROMI, { cf: { cacheTtl: 21600 } });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    texte = await r.text();
+  } catch (e) { return repondre({ erreur: "NOAA PSL indisponible" }, 502); }
+  const jours = texte.trim().split(/\r?\n/).map((l) => l.trim().split(/\s+/).map(Number))
+    .filter((c) => c.length >= 7 && c.slice(0, 7).every(Number.isFinite) && c[6] < 50)
+    .slice(-40).map((c) => {
+      const rmm1 = c[5], rmm2 = -c[4], phase = phaseRmm(rmm1, rmm2);
+      return { date: `${c[0]}-${String(c[1]).padStart(2, "0")}-${String(c[2]).padStart(2, "0")}`,
+        rmm1: Math.round(rmm1 * 100) / 100, rmm2: Math.round(rmm2 * 100) / 100,
+        amplitude: Math.round(c[6] * 100) / 100, phase };
+    });
+  if (!jours.length) return repondre({ erreur: "Fichier NOAA PSL illisible" }, 502);
+  const d = jours[jours.length - 1];
+  return repondre({ source: "NOAA PSL, indice ROMI temps réel (Kiladis et al. 2014)",
+    methode: "Phase RMM équivalente : RMM1 = PC2, RMM2 = −PC1 ; MJO active si amplitude ≥ 1.",
+    dernier: { ...d, active: d.amplitude >= 1, region: REGIONS_MJO[d.phase] }, jours, mise_a_jour: new Date().toISOString() });
+}
+
 const ROUTES = {
   "/api/cyclones-actifs": { duree: 900, produire: cyclonesActifs },
-  "/api/enso-type": { duree: 43200, produire: ensoType }
+  "/api/enso-type": { duree: 43200, produire: ensoType },
+  "/api/mjo": { duree: 21600, produire: mjo }
 };
 
 export default {

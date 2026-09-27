@@ -58,5 +58,5 @@ jobs:
             --notes "Produits calculés automatiquement à partir d'ECMWF Open Data (CC BY 4.0). Ne pas modifier à la main." \
             --latest=false
           # les fichiers d'abord, le catalogue en dernier : le Worker ne voit jamais un catalogue incomplet
-          gh release upload donnees-modeles sortie/*.png sortie/*_grille.json --clobber
+          gh release upload donnees-modeles sortie/*.png sortie/grilles.json --clobber
           gh release upload donnees-modeles sortie/catalogue.json --clobber

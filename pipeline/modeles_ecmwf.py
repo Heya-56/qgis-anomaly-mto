@@ -3,13 +3,14 @@
 Lancé par GitHub Actions (.github/workflows/modeles.yml) toutes les 6 heures, ou à la main :
     python pipeline/modeles_ecmwf.py --sortie sortie/
 
-Produit, pour le dernier run disponible :
-  - cisaillement_200_850_<ech>.png : cisaillement vertical du vent 200–850 hPa, image en projection
-    Web Mercator prête à être posée sur la carte (Pacifique 130° E → 120° O, 5° N → 40° S) ;
-  - cisaillement_200_850_grille.json : les mêmes valeurs sur une grille de 1°, pour le mode ANALYSER UN POINT ;
-  - catalogue.json : le manifeste (source, run, fichiers, empreintes SHA-256, légende), lu par le Worker Cloudflare.
+Produit, pour le dernier run disponible et chaque échéance (analyse, +24 h … +120 h) :
+  - <produit>_<ech>.png : image en projection Web Mercator prête à être posée sur la carte
+    (Pacifique 130° E → 120° O, 5° N → 40° S) ;
+  - grilles.json : toutes les valeurs sur une grille de 1°, pour le mode ANALYSER UN POINT ;
+  - catalogue.json : le manifeste (source, run, fichiers, empreintes SHA-256, légendes), lu par le Worker Cloudflare.
 
-Le cisaillement est un INDICATEUR ENVIRONNEMENTAL, pas une prévision de cyclone.
+Produits : cisaillement 200–850 hPa, humidité relative 700 et 500 hPa, vorticité relative 850 hPa,
+pression au niveau de la mer, eau précipitable. Ce sont des INDICATEURS ENVIRONNEMENTAUX, pas des prévisions de cyclone.
 """
 from __future__ import annotations
 
@@ -27,32 +28,75 @@ import numpy as np
 
 SOURCE_ID = "ecmwf-ifs"
 ECHEANCES = [0, 24, 48, 72, 96, 120]
-NIVEAUX = [850, 200]
 
 # Domaine Pacifique, longitudes 0–360 (traverse l'antiméridien sans coupure)
 LAT_N, LAT_S = 5.0, -40.0
 LON_O, LON_E = 130.0, 240.0
-
-# Légende du cisaillement (m/s). Seuils indicatifs : un cisaillement faible (< ~10–12,5 m/s)
-# est historiquement associé aux environnements favorables à l'organisation des systèmes tropicaux.
-PALIERS = [
-    (0, 5, "#2b1a4a", "0–5"),
-    (5, 10, "#4b3a8c", "5–10"),
-    (10, 15, "#2f7fa8", "10–15"),
-    (15, 20, "#3fb58a", "15–20"),
-    (20, 30, "#c9c94a", "20–30"),
-    (30, 999, "#f2b445", "> 30"),
-]
 OPACITE = 185  # sur 255
+
+# Requêtes ECMWF Open Data, faites séparément : si l'une échoue, les autres produits sont quand même publiés.
+REQUETES = {
+    "niveaux": dict(type="fc", levtype="pl", param=["u", "v", "r", "vo"], levelist=[850, 700, 500, 200]),
+    "surface": dict(type="fc", levtype="sfc", param=["msl", "tcwv"]),
+}
+
+# Chaque produit : champs nécessaires, calcul, unité, paliers de légende (de, à, couleur, libellé), méthode, limites.
+# Les seuils cités sont indicatifs (littérature) : ils servent à lire la carte, pas à prévoir un cyclone.
+PRODUITS = {
+    "cisaillement_200_850": dict(
+        titre="Cisaillement vertical du vent 200–850 hPa", unite="m/s",
+        champs=[("u", 200), ("v", 200), ("u", 850), ("v", 850)],
+        calcul=lambda c: np.hypot(c[("u", 200)] - c[("u", 850)], c[("v", 200)] - c[("v", 850)]),
+        paliers=[(0, 5, "#2b1a4a", "0–5"), (5, 10, "#4b3a8c", "5–10"), (10, 15, "#2f7fa8", "10–15"),
+                 (15, 20, "#3fb58a", "15–20"), (20, 30, "#c9c94a", "20–30"), (30, None, "#f2b445", "> 30")],
+        methode="Norme de la différence vectorielle entre le vent à 200 hPa et le vent à 850 hPa (IFS, 0,25°).",
+        limites="Sortie d'un seul modèle déterministe ; indicateur environnemental, pas une prévision de cyclone."),
+    "humidite_700": dict(
+        titre="Humidité relative à 700 hPa (~3 km)", unite="%",
+        champs=[("r", 700)], calcul=lambda c: c[("r", 700)],
+        paliers=[(0, 20, "#7a4a1c", "< 20"), (20, 40, "#b98a4a", "20–40"), (40, 60, "#d9cf8f", "40–60"),
+                 (60, 70, "#7fc6a4", "60–70"), (70, 80, "#3a9fb8", "70–80"), (80, None, "#2a5fa8", "> 80")],
+        methode="Humidité relative du modèle IFS au niveau 700 hPa (0,25°).",
+        limites="Valeur instantanée du modèle, pas une mesure ; l'humidité varie vite près des orages."),
+    "humidite_500": dict(
+        titre="Humidité relative à 500 hPa (~5,5 km)", unite="%",
+        champs=[("r", 500)], calcul=lambda c: c[("r", 500)],
+        paliers=[(0, 20, "#7a4a1c", "< 20"), (20, 40, "#b98a4a", "20–40"), (40, 60, "#d9cf8f", "40–60"),
+                 (60, 70, "#7fc6a4", "60–70"), (70, 80, "#3a9fb8", "70–80"), (80, None, "#2a5fa8", "> 80")],
+        methode="Humidité relative du modèle IFS au niveau 500 hPa (0,25°).",
+        limites="Valeur instantanée du modèle, pas une mesure."),
+    "vorticite_850": dict(
+        titre="Vorticité relative à 850 hPa (~1,5 km)", unite="10⁻⁵ s⁻¹",
+        champs=[("vo", 850)], calcul=lambda c: lisser(c[("vo", 850)] * 1e5, 5),
+        paliers=[(None, -6, "#e5484d", "< −6"), (-6, -3, "#f29a4a", "−6 à −3"), (-3, -1, "#f2d38a", "−3 à −1"),
+                 (-1, 1, None, "−1 à 1"), (1, 3, "#a9cde8", "1 à 3"), (3, 6, "#4f97de", "3 à 6"), (6, None, "#2a4fa8", "> 6")],
+        methode="Vorticité relative IFS à 850 hPa, lissée sur ~1,25° pour retirer le bruit de petite échelle.",
+        limites="Dans l'hémisphère Sud, la rotation cyclonique (sens horaire) est NÉGATIVE ; au nord de l'équateur c'est l'inverse."),
+    "pression_mer": dict(
+        titre="Pression au niveau de la mer", unite="hPa",
+        champs=[("msl", 0)], calcul=lambda c: c[("msl", 0)] / 100.0,
+        paliers=[(None, 1000, "#e5484d", "< 1000"), (1000, 1005, "#f29a4a", "1000–1005"), (1005, 1010, "#f2d38a", "1005–1010"),
+                 (1010, 1015, "#cfd8dc", "1010–1015"), (1015, 1020, "#a9cde8", "1015–1020"), (1020, 1025, "#4f97de", "1020–1025"),
+                 (1025, None, "#2a4fa8", "> 1025")],
+        methode="Pression réduite au niveau de la mer du modèle IFS (0,25°).",
+        limites="Les creux de petite taille (cyclones) peuvent être sous-estimés par un modèle global."),
+    "eau_precipitable": dict(
+        titre="Eau précipitable (colonne totale)", unite="mm",
+        champs=[("tcwv", 0)], calcul=lambda c: c[("tcwv", 0)],
+        paliers=[(0, 20, "#7a4a1c", "< 20"), (20, 30, "#b98a4a", "20–30"), (30, 40, "#d9cf8f", "30–40"),
+                 (40, 50, "#7fc6a4", "40–50"), (50, 60, "#3a9fb8", "50–60"), (60, None, "#2a5fa8", "> 60")],
+        methode="Vapeur d'eau totale de la colonne (kg/m², équivalent en mm d'eau) du modèle IFS.",
+        limites="Quantité disponible, pas la pluie qui tombera réellement."),
+}
 
 
 # ---------------------------------------------------------------- lecture GRIB
 
-def lire_grib(chemin: Path) -> dict:
-    """Retourne {(param, niveau, echeance): (lats, lons, valeurs 2D)} pour une grille régulière lat/lon."""
+def lire_grib(chemin: Path, champs: dict | None = None) -> dict:
+    """Ajoute à `champs` {(param, niveau, echeance): (lats, lons, valeurs 2D)} pour une grille régulière lat/lon."""
     import eccodes
 
-    champs = {}
+    champs = {} if champs is None else champs
     with open(chemin, "rb") as f:
         while True:
             gid = eccodes.codes_grib_new_from_file(f)
@@ -60,7 +104,7 @@ def lire_grib(chemin: Path) -> dict:
                 break
             try:
                 nom = eccodes.codes_get(gid, "shortName")
-                niveau = int(eccodes.codes_get(gid, "level"))
+                niveau = int(eccodes.codes_get(gid, "level")) if eccodes.codes_get(gid, "typeOfLevel") == "isobaricInhPa" else 0
                 ech = int(eccodes.codes_get(gid, "step"))
                 ni = eccodes.codes_get(gid, "Ni")
                 nj = eccodes.codes_get(gid, "Nj")
@@ -89,12 +133,23 @@ def decouper(lats, lons, v):
     return lats[mj], lons[mi], v[np.ix_(mj, mi)]
 
 
-def cisaillement(champs: dict, ech: int):
-    lats, lons, u200 = decouper(*champs[("u", 200, ech)])
-    _, _, v200 = decouper(*champs[("v", 200, ech)])
-    _, _, u850 = decouper(*champs[("u", 850, ech)])
-    _, _, v850 = decouper(*champs[("v", 850, ech)])
-    return lats, lons, np.hypot(u200 - u850, v200 - v850)
+def lisser(v: np.ndarray, n: int) -> np.ndarray:
+    """Moyenne glissante n × n (bords recopiés)."""
+    k = n // 2
+    p = np.pad(v, k, mode="edge")
+    c = p.cumsum(0).cumsum(1)
+    c = np.pad(c, ((1, 0), (1, 0)))
+    return (c[n:, n:] - c[:-n, n:] - c[n:, :-n] + c[:-n, :-n]) / (n * n)
+
+
+def calculer(champs: dict, produit: str, ech: int):
+    d = PRODUITS[produit]
+    if any((p, niv, ech) not in champs for p, niv in d["champs"]):
+        return None
+    zone, lats, lons = {}, None, None
+    for p, niv in d["champs"]:
+        lats, lons, zone[(p, niv)] = decouper(*champs[(p, niv, ech)])
+    return lats, lons, d["calcul"](zone)
 
 
 # ---------------------------------------------------------------- images
@@ -103,10 +158,16 @@ def couleur(hexa: str):
     return tuple(int(hexa[i:i + 2], 16) for i in (1, 3, 5))
 
 
-def vers_rgba(valeurs: np.ndarray) -> np.ndarray:
+def vers_rgba(valeurs: np.ndarray, paliers) -> np.ndarray:
     rgba = np.zeros(valeurs.shape + (4,), dtype=np.uint8)
-    for bas, haut, hexa, _ in PALIERS:
-        m = (valeurs >= bas) & (valeurs < haut)
+    for bas, haut, hexa, _ in paliers:
+        if hexa is None:
+            continue
+        m = np.ones(valeurs.shape, dtype=bool)
+        if bas is not None:
+            m &= valeurs >= bas
+        if haut is not None:
+            m &= valeurs < haut
         rgba[m, :3] = couleur(hexa)
         rgba[m, 3] = OPACITE
     rgba[~np.isfinite(valeurs)] = 0
@@ -145,37 +206,51 @@ def empreinte(chemin: Path) -> str:
     return hashlib.sha256(chemin.read_bytes()).hexdigest()
 
 
+def arrondi(g):
+    return [[None if not np.isfinite(x) else round(float(x), 1) for x in ligne] for ligne in g]
+
+
 def produire(champs: dict, run: dt.datetime, sortie: Path) -> dict:
     sortie.mkdir(parents=True, exist_ok=True)
-    fichiers, grille = [], {"echeances": [], "valeurs": []}
-    produit = "cisaillement_200_850"
-    for ech in ECHEANCES:
-        if ("u", 200, ech) not in champs:
-            continue
-        lats, lons, s = cisaillement(champs, ech)
-        # image : 1 pixel ≈ 0,25° en largeur ; hauteur Mercator équivalente
-        largeur = s.shape[1]
-        hauteur = int(round(largeur * (merc_y(LAT_N) - merc_y(LAT_S)) / math.radians(LON_E - LON_O)))
-        nom = f"{produit}_{ech:03d}.png"
-        ecrire_png(sortie / nom, vers_rgba(vers_mercator(lats, s, hauteur)))
-        valide = run + dt.timedelta(hours=ech)
-        fichiers.append({"nom": nom, "produit": produit, "echeance_h": ech,
-                         "valide_utc": valide.strftime("%Y-%m-%dT%H:%MZ"), "type_mime": "image/png"})
-        # grille 1° pour l'analyse d'un point
-        pas = int(round(1.0 / abs(lats[1] - lats[0])))
-        g = s[::pas, ::pas]
-        grille.update({"lat0": float(lats[0]), "lon0": float(lons[0]), "pas": 1.0, "nj": g.shape[0], "ni": g.shape[1]})
-        grille["echeances"].append(ech)
-        grille["valeurs"].append([[None if not np.isfinite(x) else round(float(x), 1) for x in ligne] for ligne in g])
+    fichiers, produits = [], {}
+    grilles = {"echeances": ECHEANCES, "produits": {}}
+    for produit, d in PRODUITS.items():
+        valeurs_grille = []
+        for ech in ECHEANCES:
+            r = calculer(champs, produit, ech)
+            if r is None:
+                valeurs_grille.append(None)
+                continue
+            lats, lons, v = r
+            largeur = v.shape[1]
+            hauteur = int(round(largeur * (merc_y(LAT_N) - merc_y(LAT_S)) / math.radians(LON_E - LON_O)))
+            nom = f"{produit}_{ech:03d}.png"
+            ecrire_png(sortie / nom, vers_rgba(vers_mercator(lats, v, hauteur), d["paliers"]))
+            valide = run + dt.timedelta(hours=ech)
+            fichiers.append({"nom": nom, "produit": produit, "echeance_h": ech,
+                             "valide_utc": valide.strftime("%Y-%m-%dT%H:%MZ"), "type_mime": "image/png"})
+            pas = int(round(1.0 / abs(lats[1] - lats[0])))
+            g = v[::pas, ::pas]
+            grilles.update({"lat0": float(lats[0]), "lon0": float(lons[0]), "pas": 1.0, "nj": g.shape[0], "ni": g.shape[1]})
+            valeurs_grille.append(arrondi(g))
+        if any(x is not None for x in valeurs_grille):
+            grilles["produits"][produit] = {"unite": d["unite"], "valeurs": valeurs_grille}
+            produits[produit] = {
+                "titre": d["titre"], "unite": d["unite"],
+                "bornes": [[LAT_S, LON_O - 360], [LAT_N, LON_E - 360]],
+                "legende": [{"de": b, "a": h, "couleur": c, "libelle": l} for b, h, c, l in d["paliers"]],
+                "methode": d["methode"], "limites": d["limites"],
+            }
+            print(f"  {produit} : {sum(x is not None for x in valeurs_grille)} échéances")
+        else:
+            print(f"  {produit} : champs absents, produit ignoré")
 
     if not fichiers:
-        raise SystemExit("Aucun champ exploitable dans le fichier GRIB.")
+        raise SystemExit("Aucun champ exploitable dans les fichiers GRIB.")
 
-    nom_grille = f"{produit}_grille.json"
-    grille.update({"produit": produit, "unite": "m/s", "run_utc": run.strftime("%Y-%m-%dT%H:%MZ"),
-                   "source": "ECMWF Open Data (IFS), CC BY 4.0"})
-    (sortie / nom_grille).write_text(json.dumps(grille, separators=(",", ":")), encoding="utf-8")
-    fichiers.append({"nom": nom_grille, "produit": produit, "echeance_h": None, "valide_utc": None,
+    grilles.update({"run_utc": run.strftime("%Y-%m-%dT%H:%MZ"), "source": "ECMWF Open Data (IFS), CC BY 4.0"})
+    (sortie / "grilles.json").write_text(json.dumps(grilles, separators=(",", ":")), encoding="utf-8")
+    fichiers.append({"nom": "grilles.json", "produit": "grilles", "echeance_h": None, "valide_utc": None,
                      "type_mime": "application/json"})
 
     for f in fichiers:
@@ -184,22 +259,13 @@ def produire(champs: dict, run: dt.datetime, sortie: Path) -> dict:
         f["sha256"] = empreinte(chemin)
 
     catalogue = {
-        "version": 1,
+        "version": 2,
         "source_id": SOURCE_ID,
         "run_utc": run.strftime("%Y-%m-%dT%H:%MZ"),
         "genere_le": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "credit": "Contient des données ECMWF Open Data (CC BY 4.0)",
         "fichiers": fichiers,
-        "produits": {
-            produit: {
-                "titre": "Cisaillement vertical du vent 200–850 hPa",
-                "unite": "m/s",
-                "bornes": [[LAT_S, LON_O - 360], [LAT_N, LON_E - 360]],
-                "legende": [{"de": b, "a": (None if h >= 999 else h), "couleur": c, "libelle": l} for b, h, c, l in PALIERS],
-                "methode": "Norme de la différence vectorielle entre le vent à 200 hPa et le vent à 850 hPa (IFS, 0,25°).",
-                "limites": "Sortie d'un seul modèle déterministe ; indicateur environnemental, pas une prévision de cyclone.",
-            }
-        },
+        "produits": produits,
     }
     (sortie / "catalogue.json").write_text(json.dumps(catalogue, ensure_ascii=False, indent=1), encoding="utf-8")
     return catalogue
@@ -211,40 +277,51 @@ def telecharger(dossier: Path, run_force: str | None = None):
     from ecmwf.opendata import Client
 
     client = Client(source="ecmwf")
-    requete = dict(type="fc", param=["u", "v"], levtype="pl", levelist=NIVEAUX, step=ECHEANCES)
     if run_force:
         d = dt.datetime.strptime(run_force, "%Y%m%d%H")
-        requete.update(date=d.strftime("%Y%m%d"), time=d.hour)
     else:
-        d = client.latest(**requete)
-        requete.update(date=d.strftime("%Y%m%d"), time=d.hour)
-    cible = dossier / "ecmwf_uv.grib2"
-    client.retrieve(target=str(cible), **requete)
-    return cible, d.replace(tzinfo=dt.timezone.utc)
+        d = client.latest(**REQUETES["niveaux"], step=ECHEANCES)
+    fichiers = []
+    for nom, req in REQUETES.items():
+        cible = dossier / f"ecmwf_{nom}.grib2"
+        try:
+            client.retrieve(target=str(cible), date=d.strftime("%Y%m%d"), time=d.hour, step=ECHEANCES, **req)
+            fichiers.append(cible)
+        except Exception as e:  # un groupe manquant ne bloque pas les autres
+            print(f"  requête « {nom} » impossible : {e}")
+    if not fichiers:
+        raise SystemExit("Aucun téléchargement ECMWF réussi.")
+    return fichiers, d.replace(tzinfo=dt.timezone.utc)
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--sortie", default="sortie", type=Path)
-    ap.add_argument("--grib", type=Path, help="fichier GRIB déjà téléchargé (tests)")
+    ap.add_argument("--grib", type=Path, nargs="+", help="fichiers GRIB déjà téléchargés (tests)")
     ap.add_argument("--run", help="run AAAAMMJJHH (avec --grib, ou pour forcer un run)")
     ap.add_argument("--deja-publie", help="run_utc du catalogue déjà publié : on s'arrête si identique")
     a = ap.parse_args()
     a.sortie.mkdir(parents=True, exist_ok=True)
 
     if a.grib:
-        grib, run = a.grib, dt.datetime.strptime(a.run, "%Y%m%d%H").replace(tzinfo=dt.timezone.utc)
+        gribs, run = a.grib, dt.datetime.strptime(a.run, "%Y%m%d%H").replace(tzinfo=dt.timezone.utc)
     else:
-        grib, run = telecharger(a.sortie, a.run)
-    run_txt = run.strftime("%Y-%m-%dT%H:%MZ")
-    if a.deja_publie and a.deja_publie == run_txt:
-        print(f"Run {run_txt} déjà publié : rien à faire.")
-        (a.sortie / "RIEN_DE_NEUF").write_text(run_txt)
-        return 0
-    cat = produire(lire_grib(grib), run, a.sortie)
+        if a.deja_publie:
+            from ecmwf.opendata import Client
+            d = Client(source="ecmwf").latest(**REQUETES["niveaux"], step=ECHEANCES)
+            if d.strftime("%Y-%m-%dT%H:%MZ") == a.deja_publie and not a.run:
+                print(f"Run {a.deja_publie} déjà publié : rien à faire.")
+                (a.sortie / "RIEN_DE_NEUF").write_text(a.deja_publie)
+                return 0
+        gribs, run = telecharger(a.sortie, a.run)
+    champs = {}
+    for g in gribs:
+        lire_grib(g, champs)
+    cat = produire(champs, run, a.sortie)
     if not a.grib:
-        grib.unlink(missing_ok=True)
-    print(f"Run {cat['run_utc']} : {len(cat['fichiers'])} fichiers produits.")
+        for g in gribs:
+            g.unlink(missing_ok=True)
+    print(f"Run {cat['run_utc']} : {len(cat['fichiers'])} fichiers, {len(cat['produits'])} produits.")
     return 0
 
 

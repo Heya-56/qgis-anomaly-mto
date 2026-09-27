@@ -71,7 +71,17 @@ a { color: var(--accent); }
   margin-top: 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px;
   padding: 10px 12px; background: var(--panneau-2); border-radius: var(--r);
 }
-.enso-texte { display: grid; gap: 1px; }
+.enso-texte { display: grid; gap: 1px; justify-items: start; }
+.pourquoi {
+  margin-top: 4px; padding: 2px 8px; border: 1px solid var(--ligne); border-radius: 999px; background: transparent;
+  color: var(--accent); font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.pourquoi:hover { border-color: var(--accent); }
+.mjo-diagramme { width: 64px; height: 64px; flex: none; }
+.couches-groupe { margin: 8px 0 0; font-size: 12px; font-weight: 600; color: var(--texte-2); }
+.couches-groupe:first-child { margin-top: 0; }
+.fiche-section h3 { margin: 14px 0 4px; }
+.fiche-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
 .enso-texte strong { font-size: 16px; }
 .enso-texte .mono { font-size: 12px; color: var(--texte-2); }
 .enso-spark { width: 120px; height: 32px; flex: none; }
@@ -322,3 +332,4 @@ input[type="range"] { accent-color: var(--accent); width: 100%; }
 
 /* Sans réseau : on masque les images NASA (indisponibles) pour laisser voir le fond hors ligne. */
 .sans-reseau .leaflet-tile-pane, .sans-reseau .leaflet-donnees-pane, .sans-reseau .leaflet-reperes-pane { visibility: hidden; }
+.legende-bloc .pourquoi { justify-self: start; }

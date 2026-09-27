@@ -115,7 +115,14 @@
 
   function construireBoutons() {
     const box = $("couches");
+    let groupe = null;
     COUCHES.forEach((c) => {
+      if (c.groupe && c.groupe !== groupe) {
+        groupe = c.groupe;
+        const h = document.createElement("p");
+        h.className = "couches-groupe"; h.textContent = groupe;
+        box.appendChild(h);
+      }
       const b = document.createElement("button");
       b.className = "couche"; b.type = "button"; b.setAttribute("role", "radio");
       b.setAttribute("aria-checked", "false"); b.dataset.id = c.id;
@@ -243,6 +250,39 @@
   $("lecture").addEventListener("click", () => (etat.lecture ? (arreter(), majEtat()) : lancer()));
   $("temps-curseur").addEventListener("input", (e) => { arreter(); afficher(Number(e.target.value)); });
 
+  /* ================= Fiches « Pourquoi ? » ================= */
+  const FICHES = window.FICHES || {};
+  const boutonFiche = (c) => (c && c.fiche && FICHES[c.fiche]
+    ? `<button type="button" class="pourquoi" data-fiche="${c.fiche}">Pourquoi est-ce important ?</button>` : "");
+  function ouvrirFiche(id) {
+    const f = FICHES[id], d = $("fiche");
+    if (!f || !d) return;
+    $("fiche-titre").textContent = f.titre;
+    const sections = [["Ce que c'est", f.definition], ["Pourquoi c'est important", f.importance],
+      ["Comment la lire", f.lecture], ["Limites", f.limites]];
+    const corps = $("fiche-corps");
+    corps.innerHTML = "";
+    sections.forEach(([t, x]) => {
+      const sec = document.createElement("section"); sec.className = "fiche-section";
+      const h = document.createElement("h3"); h.textContent = t;
+      const p = document.createElement("p"); p.textContent = x;
+      sec.append(h, p); corps.appendChild(sec);
+    });
+    if (f.couche && COUCHES.some((c) => c.id === f.couche)) {
+      const act = document.createElement("div"); act.className = "fiche-actions";
+      const b = document.createElement("button"); b.type = "button"; b.className = "btn"; b.textContent = "Voir sur la carte";
+      b.addEventListener("click", () => { d.close(); if (vueGlobe()) fermerGlobe(); choisirCouche(f.couche); $("rail").classList.remove("ouvert"); });
+      act.appendChild(b); corps.appendChild(act);
+    }
+    if (typeof d.showModal === "function") d.showModal(); else d.setAttribute("open", "");
+  }
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest && e.target.closest("[data-fiche]");
+    if (b) ouvrirFiche(b.dataset.fiche);
+  });
+  $("fiche-fermer").addEventListener("click", () => $("fiche").close());
+  $("fiche").addEventListener("click", (e) => { if (e.target === $("fiche")) $("fiche").close(); });
+
   /* ================= Légende ================= */
   function blocDegrade(titre, stops, unite, texte) {
     const g = stops.map(([, c], k) => `${c} ${Math.round((k / (stops.length - 1)) * 100)}%`).join(", ");
@@ -257,18 +297,18 @@
     if (c && c.gibs) {
       const img = c.legende
         ? `<img src="${SRC.gibsLegendes}${c.legende}_H.svg" alt="Légende de la couche ${c.nom}" onerror="this.remove()">` : "";
-      blocs.push(`<div class="legende-bloc"><strong>${c.nom}</strong>${img}<p>${c.aide}</p><p>Source : ${c.source}</p></div>`);
+      blocs.push(`<div class="legende-bloc"><strong>${c.nom}</strong>${img}<p>${c.aide}</p><p>Source : ${c.source}</p>${boutonFiche(c)}</div>`);
     }
     if (c && c.modele) {
       const m = etat.modele;
-      if (!m) blocs.push(`<div class="legende-bloc"><strong>${c.nom}</strong><p>${c.aide}</p></div>`);
+      if (!m) blocs.push(`<div class="legende-bloc"><strong>${c.nom}</strong><p>${c.aide}</p>${boutonFiche(c)}</div>`);
       else {
         const p = m.produit, s = m.source;
         blocs.push(`<div class="legende-bloc"><strong>${p.titre} (${p.unite})</strong><div class="legende-cases">${p.legende
           .map((x) => `<span><i style="background:${x.couleur}"></i>${x.libelle}</span>`).join("")}</div>
           <p>${c.aide}</p><p>${p.limites}</p>
           <p>Source : ${s.source.nom}, run du ${s.run_utc.slice(8, 10)}/${s.run_utc.slice(5, 7)} à ${s.run_utc.slice(11, 13)} h UTC. ${s.source.credit}.</p>
-          ${vueGlobe() ? "<p>Couche visible en vue Carte.</p>" : ""}</div>`);
+          ${vueGlobe() ? "<p>Couche visible en vue Carte.</p>" : ""}${boutonFiche(c)}</div>`);
       }
     }
     if ($("opt-vent").checked) {
@@ -615,6 +655,25 @@
     chargerTypeNino();
   }
 
+  /* MJO : phase, amplitude et trajectoire des 40 derniers jours (Worker /api/mjo, NOAA PSL ROMI). */
+  async function chargerMjo() {
+    let j;
+    try { j = await lireJson("api/mjo"); } catch (e) { return; }
+    if (!j || !j.dernier) return;
+    const d = j.dernier;
+    $("mjo-etat").textContent = d.active ? `Active · phase ${d.phase}` : `Faible · phase ${d.phase}`;
+    $("mjo-etat").style.color = d.active ? COUL.accent : COUL.texte2;
+    $("mjo-valeur").textContent = `amplitude ${nombre(d.amplitude, 1)} · ${d.region} · ${d.date.slice(8, 10)}/${d.date.slice(5, 7)}`;
+    const pts = j.jours.map((x) => [Math.max(-2.9, Math.min(2.9, x.rmm1)), Math.max(-2.9, Math.min(2.9, -x.rmm2))]);
+    const axes = [0, 45, 90, 135].map((a) => { const r = Math.PI * a / 180, c = 2.9 * Math.cos(r), s = 2.9 * Math.sin(r);
+      return `<line x1="${-c}" y1="${-s}" x2="${c}" y2="${s}" stroke="#34464f" stroke-width=".04"/>`; }).join("");
+    const der = pts[pts.length - 1];
+    $("mjo-diagramme").innerHTML = `${axes}<circle r="1" fill="none" stroke="#6d828a" stroke-width=".06"/>
+      <polyline points="${pts.map((p) => p.join(",")).join(" ")}" fill="none" stroke="${COUL.accent}" stroke-width=".09" stroke-linejoin="round"/>
+      <circle cx="${der[0]}" cy="${der[1]}" r=".22" fill="${COUL.accent}"/>`;
+    $("mjo").hidden = false;
+  }
+
   /* Tendance du type d'El Niño : Niño3 − Niño4 sur les 3 derniers mois (Worker /api/enso-type, NOAA CPC).
      Indicatif : le type retenu par l'atlas est calculé sur déc.-fév. (Kug et al. 2009). */
   async function chargerTypeNino() {
@@ -859,5 +918,6 @@
   choisirCouche("goes");
   chargerEpisodes();
   chargerEnso();
+  chargerMjo();
   majFondHorsLigne();
 })();
