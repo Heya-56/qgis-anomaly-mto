@@ -1,5 +1,5 @@
 /* Atlas Pacifica — application installable (PWA) : enregistrement du service worker,
-   bandeau hors ligne et bouton « Installer l'application ». */
+   bandeau hors ligne, bouton « Installer l'application », notice cookies et fenêtre de confidentialité. */
 (() => {
   "use strict";
   const bandeau = document.getElementById("hors-ligne");
@@ -33,4 +33,22 @@
     });
   }
   window.addEventListener("appinstalled", () => { if (installer) installer.hidden = true; });
+
+  /* Notice d'information (pas de consentement à recueillir : aucun traceur). Mémorisée sur l'appareil. */
+  const CLE = "atlas-pacifica-notice-lue";
+  const notice = document.getElementById("notice");
+  const fenetre = document.getElementById("confidentialite");
+  const lire = () => { try { return localStorage.getItem(CLE) === "1"; } catch (e) { return false; } };
+  const ecrire = () => { try { localStorage.setItem(CLE, "1"); } catch (e) { /* stockage indisponible */ } };
+  function fermerNotice() { ecrire(); if (notice) notice.hidden = true; }
+  function ouvrirFenetre() {
+    if (!fenetre) return;
+    if (typeof fenetre.showModal === "function") fenetre.showModal(); else fenetre.setAttribute("open", "");
+  }
+  if (notice && !lire()) notice.hidden = false;
+  document.getElementById("notice-ok")?.addEventListener("click", fermerNotice);
+  document.getElementById("notice-plus")?.addEventListener("click", () => { fermerNotice(); ouvrirFenetre(); });
+  document.getElementById("ouvrir-confidentialite")?.addEventListener("click", ouvrirFenetre);
+  document.getElementById("fermer-confidentialite")?.addEventListener("click", () => fenetre.close ? fenetre.close() : fenetre.removeAttribute("open"));
+  fenetre?.addEventListener("click", (e) => { if (e.target === fenetre && fenetre.close) fenetre.close(); });
 })();

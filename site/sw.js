@@ -2,7 +2,7 @@
    - Coquille de l'application : mise en cache à l'installation, servie hors ligne.
    - Données (data/*.json, /api/*) : réseau d'abord, sinon dernière copie connue.
    - Tuiles satellite NASA GIBS : non stockées (réponses opaques trop lourdes pour le stockage d'un téléphone). */
-const VERSION = "atlas-pacifica-v1";
+const VERSION = "atlas-pacifica-v2";
 const COQUILLE = `${VERSION}-coquille`;
 const DONNEES = `${VERSION}-donnees`;
 
@@ -10,11 +10,22 @@ const FICHIERS = [
   "./", "manifest.webmanifest",
   "assets/app.css", "assets/app.js", "assets/couches.js", "assets/lieux.js", "assets/pwa.js",
   "vendor/leaflet/leaflet.css", "vendor/leaflet/leaflet.js", "vendor/chart.umd.js",
-  "icones/icone-32.png", "icones/icone-192.png", "icones/logo-128.webp"
+  "icones/icone-32.png", "icones/icone-192.png", "icones/logo-128.webp",
+  "vendor/fonts/ibm-plex-sans-condensed-latin-400-normal.woff2", "vendor/fonts/ibm-plex-sans-condensed-latin-500-normal.woff2",
+  "vendor/fonts/ibm-plex-sans-condensed-latin-600-normal.woff2", "vendor/fonts/ibm-plex-sans-condensed-latin-700-normal.woff2",
+  "vendor/fonts/ibm-plex-mono-latin-400-normal.woff2", "vendor/fonts/ibm-plex-mono-latin-500-normal.woff2"
+];
+
+/* Données de l'atlas disponibles dès l'installation, même sans jamais les avoir ouvertes en ligne. */
+const DONNEES_BASE = [
+  "data/terres-pacifique.geojson", "data/oni.json", "data/saisons.json", "data/cyclones.json", "data/episodes.json"
 ];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(COQUILLE).then((c) => c.addAll(FICHIERS)).then(() => self.skipWaiting()));
+  e.waitUntil(Promise.all([
+    caches.open(COQUILLE).then((c) => c.addAll(FICHIERS)),
+    caches.open(DONNEES).then((c) => c.addAll(DONNEES_BASE))
+  ]).then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", (e) => {

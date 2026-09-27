@@ -12,9 +12,6 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Atlas Pacifica">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="vendor/maplibre/maplibre-gl.css">
 <link rel="stylesheet" href="assets/app.css">
@@ -86,6 +83,7 @@
     <footer class="rail-pied">
       <p>Imagerie : NASA GIBS (GOES-West NOAA, GPM IMERG, GHRSST MUR, AMSR2). Prévisions : Open-Meteo. Normales : NASA POWER. Cyclones : NOAA IBTrACS (historique) et GDACS, Commission européenne / ONU (en cours). Globe : MapLibre.</p>
       <p>Outil d'analyse climatologique, pas une prévision ni une alerte officielle. Pour les vigilances : <a href="https://meteo.pf" target="_blank" rel="noopener">meteo.pf</a>.</p>
+      <p><button type="button" class="lien-bouton" id="ouvrir-confidentialite">Confidentialité et mentions légales</button></p>
     </footer>
   </aside>
 
@@ -157,6 +155,37 @@
     </section>
   </aside>
 </div>
+
+<p class="notice" id="notice" role="region" aria-label="Information cookies" hidden>
+  <span><strong>Aucun cookie publicitaire ni mesure d'audience.</strong> Ce site stocke seulement sur votre appareil ce qui lui permet de fonctionner hors ligne.</span>
+  <span class="notice-actions">
+    <button type="button" class="btn" id="notice-plus">En savoir plus</button>
+    <button type="button" class="btn" id="notice-ok">J'ai compris</button>
+  </span>
+</p>
+
+<dialog class="fenetre" id="confidentialite" aria-labelledby="conf-titre">
+  <div class="fenetre-tete">
+    <h2 id="conf-titre">Confidentialité et mentions légales</h2>
+    <button type="button" class="btn-icone" id="fermer-confidentialite" aria-label="Fermer">✕</button>
+  </div>
+  <div class="fenetre-corps">
+    <h3>Cookies et traceurs</h3>
+    <p>Atlas Pacifica ne dépose aucun cookie publicitaire, ne mesure pas l'audience et n'utilise aucun outil de suivi. Aucun consentement n'est donc demandé.</p>
+    <p>Pour fonctionner, l'application garde sur votre appareil une copie de ses fichiers et des dernières données consultées (usage hors ligne), ainsi que le fait que vous avez lu ce message. Ces éléments restent sur votre appareil ; vous pouvez les effacer depuis les réglages de votre navigateur.</p>
+    <p>L'espace réservé, lorsqu'il sera ouvert, utilisera un cookie de connexion strictement nécessaire, déposé par Cloudflare Access.</p>
+    <h3>Données transmises</h3>
+    <p>Comme pour tout site web, votre adresse IP est reçue par l'hébergeur (Cloudflare) pour afficher les pages et protéger le site. Lorsque la carte affiche leurs données, votre navigateur contacte aussi directement la NASA (images satellite GIBS, normales POWER) et Open-Meteo (prévisions de vent et analyse d'un point). Les polices de caractères sont hébergées sur ce site : aucun appel à Google.</p>
+    <h3>Éditeur</h3>
+    <p>Hinova Digital, entreprise individuelle de Heianui Tapare, SIREN 978 221 281, RCS Lorient, Ploemeur (Morbihan, France). Directrice de la publication : Heianui Tapare.</p>
+    <h3>Hébergement</h3>
+    <p>Cloudflare, Inc., 101 Townsend Street, San Francisco, CA 94107, États-Unis.</p>
+    <h3>Nature du service</h3>
+    <p>Atlas Pacifica est un outil d'analyse climatologique et cartographique. Il ne constitue ni une prévision officielle ni un système d'alerte. Pour les vigilances et avis cycloniques en Polynésie française, consultez <a href="https://meteo.pf" target="_blank" rel="noopener">Météo-France Polynésie</a>.</p>
+    <h3>Sources des données</h3>
+    <p>NASA GIBS (GOES-West NOAA, GPM IMERG, GHRSST MUR, AMSR2), NASA POWER, Open-Meteo (CC BY 4.0), NOAA IBTrACS, NOAA CPC, GDACS (Commission européenne / ONU), Copernicus ERA5, Natural Earth (fond de carte hors ligne).</p>
+  </div>
+</dialog>
 
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/chart.umd.js"></script>

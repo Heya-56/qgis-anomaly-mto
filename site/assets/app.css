@@ -1,4 +1,10 @@
 /* Atlas Pacifica — thème unique "salle de prévision" (sombre, choisi volontairement pour l'imagerie satellite) */
+@font-face { font-family: "IBM Plex Sans Condensed"; font-style: normal; font-weight: 400; font-display: swap; src: url("../vendor/fonts/ibm-plex-sans-condensed-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Sans Condensed"; font-style: normal; font-weight: 500; font-display: swap; src: url("../vendor/fonts/ibm-plex-sans-condensed-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Sans Condensed"; font-style: normal; font-weight: 600; font-display: swap; src: url("../vendor/fonts/ibm-plex-sans-condensed-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Sans Condensed"; font-style: normal; font-weight: 700; font-display: swap; src: url("../vendor/fonts/ibm-plex-sans-condensed-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("../vendor/fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url("../vendor/fonts/ibm-plex-mono-latin-500-normal.woff2") format("woff2"); }
 :root {
   color-scheme: dark;
   --fond: #0b1216;
@@ -292,3 +298,27 @@ input[type="range"] { accent-color: var(--accent); width: 100%; }
 .globe-etiquette { transform: translate(14px, -50%); pointer-events: none; }
 
 .leaflet-div-icon.actif, .leaflet-div-icon.fleche { background: none; border: 0; }
+
+/* ---------- Confidentialité ---------- */
+.rail-pied .lien-bouton { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; cursor: pointer; font-size: inherit; }
+.notice {
+  position: absolute; z-index: 1300; right: 12px; bottom: 12px; max-width: min(380px, calc(100% - 24px));
+  margin: 0; padding: 12px 14px; border: 1px solid var(--ligne); border-radius: var(--r);
+  background: var(--panneau); color: var(--texte-2); font-size: 13px; display: grid; gap: 8px;
+}
+.notice[hidden] { display: none; }
+.notice strong { color: var(--texte); }
+.notice-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.fenetre {
+  width: min(640px, calc(100% - 24px)); max-height: calc(100% - 48px); padding: 0;
+  border: 1px solid var(--ligne); border-radius: var(--r); background: var(--panneau); color: var(--texte);
+}
+.fenetre::backdrop { background: rgba(0, 0, 0, .6); }
+.fenetre-tete { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--ligne); position: sticky; top: 0; background: var(--panneau); }
+.fenetre-tete h2 { margin: 0; font-size: 18px; }
+.fenetre-corps { padding: 4px 16px 16px; font-size: 14px; color: var(--texte-2); }
+.fenetre-corps h3 { color: var(--texte); font-size: 15px; margin: 16px 0 4px; }
+.fenetre-corps p, .fenetre-corps ul { margin: 4px 0; }
+
+/* Sans réseau : on masque les images NASA (indisponibles) pour laisser voir le fond hors ligne. */
+.sans-reseau .leaflet-tile-pane, .sans-reseau .leaflet-donnees-pane, .sans-reseau .leaflet-reperes-pane { visibility: hidden; }

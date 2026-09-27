@@ -45,6 +45,28 @@
 
   wms("BlueMarble_ShadedRelief_Bathymetry", { format: "image/jpeg", transparent: false, pane: "tilePane" }).addTo(carte);
   const reperes = L.layerGroup([wms("Coastlines_15m", { pane: "reperes" }), wms("Reference_Labels_15m", { pane: "reperes" })]).addTo(carte);
+
+  /* Fond de carte hors ligne : terres du Pacifique (Natural Earth 1:10 M, domaine public), stocké sur l'appareil.
+     Affiché à la place des images NASA quand il n'y a pas de réseau. */
+  carte.createPane("horsligne");
+  carte.getPane("horsligne").style.zIndex = 250;
+  const horsLigne = { calque: null };
+  async function majFondHorsLigne() {
+    const actif = !navigator.onLine;
+    document.body.classList.toggle("sans-reseau", actif);
+    if (!actif) { if (horsLigne.calque) carte.removeLayer(horsLigne.calque); return; }
+    if (!horsLigne.calque) {
+      let terres;
+      try { terres = await lireJson("data/terres-pacifique.geojson"); } catch (e) { return; }
+      horsLigne.calque = L.geoJSON(terres, {
+        pane: "horsligne", interactive: false,
+        style: { color: "#9fc1cc", weight: 1, fillColor: "#35505c", fillOpacity: 1 }
+      });
+    }
+    horsLigne.calque.addTo(carte);
+  }
+  window.addEventListener("online", majFondHorsLigne);
+  window.addEventListener("offline", majFondHorsLigne);
   carte.attributionControl.addAttribution('Prévisions <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> · Normales <a href="https://power.larc.nasa.gov" target="_blank" rel="noopener">NASA POWER</a>');
 
   /* ================= Couches et animation ================= */
@@ -769,4 +791,5 @@
   choisirCouche("goes");
   chargerEpisodes();
   chargerEnso();
+  majFondHorsLigne();
 })();
