@@ -18,8 +18,8 @@
   "r2_buckets": [
     { "binding": "DONNEES", "bucket_name": "atlas-pacifica-donnees" }
   ],
-  // Recopie horaire des produits publiés par GitHub Actions
-  "triggers": { "crons": ["23 * * * *"] },
+  // Copie progressive des produits publiés par GitHub Actions (quelques fichiers toutes les 5 minutes)
+  "triggers": { "crons": ["*/5 * * * *"] },
   "observability": {
     "enabled": true
   }

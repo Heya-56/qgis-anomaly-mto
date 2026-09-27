@@ -5,7 +5,7 @@
    - /api/mjo             : oscillation de Madden-Julian (indice ROMI temps réel, NOAA PSL), 40 derniers jours, cache 6 h
    - /api/catalogue       : derniers produits de modèles disponibles, avec leur traçabilité (base D1)
    - /donnees/<clé>       : fichiers de produits stockés dans R2 (images, grilles)
-   Tâche planifiée (toutes les heures) : recopie dans R2 les produits publiés par GitHub Actions
+   Tâche planifiée (toutes les 5 minutes, copie progressive) : recopie dans R2 les produits publiés par GitHub Actions
    (release « donnees-modeles »), vérifie leurs empreintes SHA-256 et les inscrit au catalogue D1.
    Sécurité : lecture seule (GET/HEAD), limitation de débit par adresse IP, textes externes nettoyés, en-têtes stricts. */
 
@@ -142,6 +142,10 @@ async function journal(env, source, statut, message) {
     .bind(new Date().toISOString(), source, statut, String(message).slice(0, 500)).run();
 }
 
+/* Copie progressive : quelques fichiers par exécution, pour rester sous la limite de calcul
+   de l'offre gratuite (10 ms par exécution). Le run est « partiel » tant que tous ses fichiers ne sont pas copiés. */
+const FICHIERS_PAR_PASSAGE = 4;
+
 async function synchroniser(env) {
   let cat;
   try {
@@ -156,37 +160,45 @@ async function synchroniser(env) {
     await journal(env, source || "?", "erreur", "catalogue invalide"); return;
   }
   const runId = `${source}/${runCompact}`;
-  const deja = await env.DB.prepare("SELECT id FROM runs WHERE id = ?").bind(runId).first();
-  if (deja) { await journal(env, source, "rien_de_neuf", runId); return; }
+  const run = await env.DB.prepare("SELECT statut FROM runs WHERE id = ?").bind(runId).first();
+  if (run && run.statut === "complet") return;
+  if (!run) {
+    await env.DB.prepare("INSERT OR IGNORE INTO runs (id, source_id, run_utc, recu_le, statut, manifeste) VALUES (?, ?, ?, ?, 'partiel', '{}')")
+      .bind(runId, source, cat.run_utc, new Date().toISOString()).run();
+  }
 
-  const lignes = [];
-  for (const f of cat.fichiers.slice(0, 45)) {
-    const nom = String(f.nom || "");
-    const cle = `modeles/${source}/${runCompact}/${nom}`;
-    if (!CLE_SURE.test(cle)) { await journal(env, source, "erreur", `nom refusé : ${nom}`); return; }
-    const r = await fetch(RELEASE + encodeURIComponent(nom), { cf: { cacheTtl: 0 } });
-    if (!r.ok) { await journal(env, source, "erreur", `${nom} HTTP ${r.status}`); return; }
+  const faits = new Set(((await env.DB.prepare("SELECT cle FROM fichiers WHERE run_id = ?").bind(runId).all()).results || []).map((x) => x.cle));
+  const attendus = cat.fichiers.slice(0, 45).map((f) => ({ f, cle: `modeles/${source}/${runCompact}/${String(f.nom || "")}` }));
+  for (const { f, cle } of attendus) {
+    if (!CLE_SURE.test(cle)) { await journal(env, source, "erreur", `nom refusé : ${f.nom}`); return; }
+  }
+  const restants = attendus.filter((x) => !faits.has(x.cle));
+
+  for (const { f, cle } of restants.slice(0, FICHIERS_PAR_PASSAGE)) {
+    const r = await fetch(RELEASE + encodeURIComponent(f.nom), { cf: { cacheTtl: 0 } });
+    if (!r.ok) { await journal(env, source, "erreur", `${f.nom} HTTP ${r.status}`); return; }
     const buf = await r.arrayBuffer();
     if ((await sha256(buf)) !== f.sha256) {
-      await journal(env, source, "erreur", `${nom} : empreinte différente (publication en cours ?), nouvel essai dans 1 h`); return;
+      await journal(env, source, "erreur", `${f.nom} : empreinte différente (publication en cours ?), nouvel essai plus tard`); return;
     }
     const type = f.type_mime === "image/png" ? "image/png" : "application/json";
     await env.DONNEES.put(cle, buf, { httpMetadata: { contentType: type } });
-    lignes.push({ cle, produit: String(f.produit || ""), ech: Number.isFinite(f.echeance_h) ? f.echeance_h : null,
-      valide: f.valide_utc || null, type, octets: buf.byteLength, sha: f.sha256 });
+    await env.DB.prepare("INSERT OR REPLACE INTO fichiers (cle, run_id, produit, echeance_h, valide_utc, type_mime, octets, sha256) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind(cle, runId, String(f.produit || ""), Number.isFinite(f.echeance_h) ? f.echeance_h : null, f.valide_utc || null, type, buf.byteLength, f.sha256).run();
   }
 
-  const manifeste = { ...cat, fichiers: lignes.map((l) => ({ ...l, url: `/donnees/${l.cle}` })) };
-  const lots = [env.DB.prepare("INSERT INTO runs (id, source_id, run_utc, recu_le, statut, manifeste) VALUES (?, ?, ?, ?, 'complet', ?)")
-    .bind(runId, source, cat.run_utc, new Date().toISOString(), JSON.stringify(manifeste))];
-  for (const l of lignes) {
-    lots.push(env.DB.prepare("INSERT OR REPLACE INTO fichiers (cle, run_id, produit, echeance_h, valide_utc, type_mime, octets, sha256) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind(l.cle, runId, l.produit, l.ech, l.valide, l.type, l.octets, l.sha));
+  if (restants.length > FICHIERS_PAR_PASSAGE) {
+    await journal(env, source, "en_cours", `${runId} : ${attendus.length - restants.length + FICHIERS_PAR_PASSAGE}/${attendus.length} fichiers`);
+    return;
   }
-  await env.DB.batch(lots);
+
+  const lignes = (await env.DB.prepare("SELECT cle, produit, echeance_h AS ech, valide_utc AS valide, type_mime AS type, octets, sha256 AS sha FROM fichiers WHERE run_id = ?").bind(runId).all()).results || [];
+  const manifeste = { ...cat, fichiers: lignes.map((l) => ({ ...l, url: `/donnees/${l.cle}` })) };
+  await env.DB.prepare("UPDATE runs SET statut = 'complet', manifeste = ?, recu_le = ? WHERE id = ?")
+    .bind(JSON.stringify(manifeste), new Date().toISOString(), runId).run();
   await journal(env, source, "ok", `${runId} : ${lignes.length} fichiers`);
 
-  // ménage : on garde les RUNS_GARDES derniers runs
+  // ménage : on garde les RUNS_GARDES derniers runs complets
   const vieux = await env.DB.prepare("SELECT id FROM runs WHERE source_id = ? ORDER BY run_utc DESC LIMIT -1 OFFSET ?")
     .bind(source, RUNS_GARDES).all();
   for (const { id } of vieux.results || []) {
@@ -197,8 +209,19 @@ async function synchroniser(env) {
   }
 }
 
-async function catalogue(env) {
+/* Secours si la tâche planifiée ne tourne pas : une consultation du catalogue relance une copie,
+   au plus toutes les 4 minutes (horodatage conservé dans le journal). */
+async function relancerSiBesoin(env, ctx) {
+  const d = await env.DB.prepare("SELECT quand FROM journal_donnees ORDER BY id DESC LIMIT 1").first();
+  if (d && Date.now() - Date.parse(d.quand) < 4 * 60 * 1000) return;
+  await journal(env, "atlas", "relance", "copie déclenchée par une consultation");
+  await env.DB.prepare("DELETE FROM journal_donnees WHERE id <= (SELECT MAX(id) - 500 FROM journal_donnees)").run();
+  ctx.waitUntil(synchroniser(env).catch(() => {}));
+}
+
+async function catalogue(env, ctx) {
   if (!env.DB) return repondre({ erreur: "Catalogue non configuré" }, 503);
+  if (env.DONNEES) await relancerSiBesoin(env, ctx).catch(() => {});
   const r = await env.DB.prepare(
     "SELECT r.id, r.source_id, r.run_utc, r.recu_le, r.manifeste, s.nom, s.licence, s.credit, s.url, s.frequence, s.limites " +
     "FROM runs r JOIN sources s ON s.id = r.source_id WHERE r.statut = 'complet' AND r.run_utc = " +
@@ -285,7 +308,7 @@ export default {
         const { success } = await env.LIMITEUR.limit({ key: request.headers.get("cf-connecting-ip") || "inconnu" });
         if (!success) return repondre({ erreur: "Trop de requêtes, réessayez dans une minute." }, 429, { "retry-after": "60" });
       }
-      return url.pathname === "/api/catalogue" ? catalogue(env) : fichierDonnees(env, url.pathname);
+      return url.pathname === "/api/catalogue" ? catalogue(env, ctx) : fichierDonnees(env, url.pathname);
     }
     if (url.pathname.startsWith("/api/")) return repondre({ erreur: "Route inconnue" }, 404);
     return env.ASSETS.fetch(request);

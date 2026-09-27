@@ -16,7 +16,7 @@ Propriétaire : Heianui Tapare (Hinova Digital). En ligne : https://qgis-anomaly
 - `site/` : PWA statique (Leaflet, MapLibre, Chart.js vendorisés, polices auto-hébergées), `sw.js` hors ligne, `_headers` (CSP stricte).
 - `worker.js` + `wrangler.jsonc` : Worker Cloudflare (déployé par Workers Builds à chaque push sur `main`).
   - `/api/cyclones-actifs` (GDACS, 48 h), `/api/enso-type` (Niño3 − Niño4, NOAA CPC), `/api/catalogue` (D1), `/donnees/<clé>` (R2).
-  - Tâche horaire (cron `23 * * * *`) : recopie la release GitHub `donnees-modeles` dans R2 après vérification SHA-256 et l'inscrit dans D1.
+  - Tâche toutes les 5 min (cron `*/5 * * * *`) : recopie progressive (4 fichiers par passage, limite CPU gratuite) de la release GitHub `donnees-modeles` dans R2 après vérification SHA-256 et l'inscrit dans D1.
   - Limitation 60 req/min/IP sur les routes dynamiques.
 - `pipeline/modeles_ecmwf.py` + `.github/workflows/modeles.yml` : toutes les 6 h, dernier run ECMWF IFS (Open Data) → produits (cisaillement 200–850 hPa : PNG Web Mercator + grille 1° + `catalogue.json`) → release `donnees-modeles`.
 - D1 `atlas-pf-db` (schéma : `migrations/0001_catalogue.sql`), R2 `atlas-pacifica-donnees`.
