@@ -2,6 +2,10 @@
    Les fichiers du site (dossier site/) sont servis directement par Cloudflare ; ce Worker ne répond qu'aux routes /api/.
    - /api/cyclones-actifs : relais GDACS (UE / ONU), cyclones actifs des dernières 48 h, cache 15 min
    - /api/enso-type       : gradient Niño3 − Niño4 des 3 derniers mois (NOAA CPC), cache 12 h
+   - /api/catalogue       : derniers produits de modèles disponibles, avec leur traçabilité (base D1)
+   - /donnees/<clé>       : fichiers de produits stockés dans R2 (images, grilles)
+   Tâche planifiée (toutes les heures) : recopie dans R2 les produits publiés par GitHub Actions
+   (release « donnees-modeles »), vérifie leurs empreintes SHA-256 et les inscrit au catalogue D1.
    Sécurité : lecture seule (GET/HEAD), limitation de débit par adresse IP, textes externes nettoyés, en-têtes stricts. */
 
 const GDACS_LISTE = "https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventlist=TC";
@@ -122,12 +126,111 @@ async function ensoType() {
     seuils: { est: SEUIL_EST, centre: SEUIL_CENTRE }, mois: der, gradient, tendance, mise_a_jour: new Date().toISOString() });
 }
 
+/* ================= Catalogue des produits de modèles (D1 + R2) ================= */
+const DEPOT = "Heya-56/qgis-anomaly-mto";
+const RELEASE = `https://github.com/${DEPOT}/releases/download/donnees-modeles/`;
+const RUNS_GARDES = 8;
+const CLE_SURE = /^modeles\/[a-z0-9-]+\/\d{10}\/[a-z0-9_]+\.(png|json)$/;
+
+async function sha256(buf) {
+  const h = await crypto.subtle.digest("SHA-256", buf);
+  return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+async function journal(env, source, statut, message) {
+  await env.DB.prepare("INSERT INTO journal_donnees (quand, source_id, statut, message) VALUES (?, ?, ?, ?)")
+    .bind(new Date().toISOString(), source, statut, String(message).slice(0, 500)).run();
+}
+
+async function synchroniser(env) {
+  let cat;
+  try {
+    const r = await fetch(RELEASE + "catalogue.json", { cf: { cacheTtl: 0 } });
+    if (!r.ok) throw new Error(`catalogue HTTP ${r.status}`);
+    cat = await r.json();
+  } catch (e) { await journal(env, "ecmwf-ifs", "erreur", e.message); return; }
+
+  const source = String(cat.source_id || "");
+  const runCompact = String(cat.run_utc || "").replace(/[^0-9]/g, "").slice(0, 10);
+  if (!/^[a-z0-9-]+$/.test(source) || !/^\d{10}$/.test(runCompact) || !Array.isArray(cat.fichiers)) {
+    await journal(env, source || "?", "erreur", "catalogue invalide"); return;
+  }
+  const runId = `${source}/${runCompact}`;
+  const deja = await env.DB.prepare("SELECT id FROM runs WHERE id = ?").bind(runId).first();
+  if (deja) { await journal(env, source, "rien_de_neuf", runId); return; }
+
+  const lignes = [];
+  for (const f of cat.fichiers.slice(0, 40)) {
+    const nom = String(f.nom || "");
+    const cle = `modeles/${source}/${runCompact}/${nom}`;
+    if (!CLE_SURE.test(cle)) { await journal(env, source, "erreur", `nom refusé : ${nom}`); return; }
+    const r = await fetch(RELEASE + encodeURIComponent(nom), { cf: { cacheTtl: 0 } });
+    if (!r.ok) { await journal(env, source, "erreur", `${nom} HTTP ${r.status}`); return; }
+    const buf = await r.arrayBuffer();
+    if ((await sha256(buf)) !== f.sha256) {
+      await journal(env, source, "erreur", `${nom} : empreinte différente (publication en cours ?), nouvel essai dans 1 h`); return;
+    }
+    const type = f.type_mime === "image/png" ? "image/png" : "application/json";
+    await env.DONNEES.put(cle, buf, { httpMetadata: { contentType: type } });
+    lignes.push({ cle, produit: String(f.produit || ""), ech: Number.isFinite(f.echeance_h) ? f.echeance_h : null,
+      valide: f.valide_utc || null, type, octets: buf.byteLength, sha: f.sha256 });
+  }
+
+  const manifeste = { ...cat, fichiers: lignes.map((l) => ({ ...l, url: `/donnees/${l.cle}` })) };
+  const lots = [env.DB.prepare("INSERT INTO runs (id, source_id, run_utc, recu_le, statut, manifeste) VALUES (?, ?, ?, ?, 'complet', ?)")
+    .bind(runId, source, cat.run_utc, new Date().toISOString(), JSON.stringify(manifeste))];
+  for (const l of lignes) {
+    lots.push(env.DB.prepare("INSERT OR REPLACE INTO fichiers (cle, run_id, produit, echeance_h, valide_utc, type_mime, octets, sha256) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind(l.cle, runId, l.produit, l.ech, l.valide, l.type, l.octets, l.sha));
+  }
+  await env.DB.batch(lots);
+  await journal(env, source, "ok", `${runId} : ${lignes.length} fichiers`);
+
+  // ménage : on garde les RUNS_GARDES derniers runs
+  const vieux = await env.DB.prepare("SELECT id FROM runs WHERE source_id = ? ORDER BY run_utc DESC LIMIT -1 OFFSET ?")
+    .bind(source, RUNS_GARDES).all();
+  for (const { id } of vieux.results || []) {
+    const cles = await env.DB.prepare("SELECT cle FROM fichiers WHERE run_id = ?").bind(id).all();
+    const liste = (cles.results || []).map((x) => x.cle);
+    if (liste.length) await env.DONNEES.delete(liste);
+    await env.DB.batch([env.DB.prepare("DELETE FROM fichiers WHERE run_id = ?").bind(id), env.DB.prepare("DELETE FROM runs WHERE id = ?").bind(id)]);
+  }
+}
+
+async function catalogue(env) {
+  if (!env.DB) return repondre({ erreur: "Catalogue non configuré" }, 503);
+  const r = await env.DB.prepare(
+    "SELECT r.id, r.source_id, r.run_utc, r.recu_le, r.manifeste, s.nom, s.licence, s.credit, s.url, s.frequence, s.limites " +
+    "FROM runs r JOIN sources s ON s.id = r.source_id WHERE r.statut = 'complet' AND r.run_utc = " +
+    "(SELECT MAX(run_utc) FROM runs r2 WHERE r2.source_id = r.source_id AND r2.statut = 'complet')").all();
+  const sources = (r.results || []).map((x) => ({
+    source: { id: x.source_id, nom: x.nom, licence: x.licence, credit: x.credit, url: x.url, frequence: x.frequence, limites: x.limites },
+    run: { id: x.id, run_utc: x.run_utc, recu_le: x.recu_le }, ...JSON.parse(x.manifeste)
+  }));
+  const dernier = await env.DB.prepare("SELECT quand, source_id, statut, message FROM journal_donnees ORDER BY id DESC LIMIT 5").all();
+  return repondre({ mise_a_jour: new Date().toISOString(), sources, journal: dernier.results || [] });
+}
+
+async function fichierDonnees(env, chemin) {
+  const cle = chemin.replace(/^\/donnees\//, "");
+  if (!CLE_SURE.test(cle) || !env.DONNEES) return repondre({ erreur: "Fichier inconnu" }, 404);
+  const obj = await env.DONNEES.get(cle);
+  if (!obj) return repondre({ erreur: "Fichier inconnu" }, 404);
+  return new Response(obj.body, { headers: {
+    "content-type": obj.httpMetadata?.contentType || "application/octet-stream",
+    "cache-control": "public, max-age=86400, immutable",
+    "x-content-type-options": "nosniff", "cross-origin-resource-policy": "same-origin", "etag": obj.httpEtag } });
+}
+
 const ROUTES = {
   "/api/cyclones-actifs": { duree: 900, produire: cyclonesActifs },
   "/api/enso-type": { duree: 43200, produire: ensoType }
 };
 
 export default {
+  async scheduled(evenement, env, ctx) {
+    if (env.DB && env.DONNEES) ctx.waitUntil(synchroniser(env));
+  },
+
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (request.method !== "GET" && request.method !== "HEAD") {
@@ -142,6 +245,13 @@ export default {
         if (!success) return repondre({ erreur: "Trop de requêtes, réessayez dans une minute." }, 429, { "retry-after": "60" });
       }
       return avecCache(request, ctx, url.pathname, route.duree, route.produire);
+    }
+    if (url.pathname === "/api/catalogue" || url.pathname.startsWith("/donnees/")) {
+      if (env.LIMITEUR) {
+        const { success } = await env.LIMITEUR.limit({ key: request.headers.get("cf-connecting-ip") || "inconnu" });
+        if (!success) return repondre({ erreur: "Trop de requêtes, réessayez dans une minute." }, 429, { "retry-after": "60" });
+      }
+      return url.pathname === "/api/catalogue" ? catalogue(env) : fichierDonnees(env, url.pathname);
     }
     if (url.pathname.startsWith("/api/")) return repondre({ erreur: "Route inconnue" }, 404);
     return env.ASSETS.fetch(request);

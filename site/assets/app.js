@@ -85,6 +85,29 @@
     }
     return out;
   }
+  /* Couches de modèles : produits pré-calculés (GitHub Actions → R2), décrits par /api/catalogue. */
+  const modeles = { catalogue: null, promesse: null };
+  function lireCatalogue() {
+    if (!modeles.promesse) modeles.promesse = lireJson("api/catalogue").then((j) => (modeles.catalogue = j)).catch((e) => { modeles.promesse = null; throw e; });
+    return modeles.promesse;
+  }
+  async function preparerModele(c) {
+    const cat = await lireCatalogue();
+    for (const s of cat.sources || []) {
+      const p = s.produits && s.produits[c.modele];
+      if (!p) continue;
+      const images = s.fichiers.filter((f) => f.produit === c.modele && f.type === "image/png" && f.ech !== null)
+        .sort((a, b) => a.ech - b.ech);
+      if (!images.length) continue;
+      return { produit: p, source: s, images };
+    }
+    return null;
+  }
+  const libelleEcheance = (f, run) => {
+    const d = new Date(f.valide.replace("Z", ":00Z"));
+    return `${f.ech === 0 ? "Analyse" : `Prévision +${f.ech} h`} · ${fJour.format(d)} ${fHeure.format(d)} Tahiti · run ${run.slice(8, 10)}/${run.slice(5, 7)} ${run.slice(11, 13)} h UTC`;
+  };
+
   const tempsWms = (c, d) => (c.pas === "1j" ? d.toISOString().slice(0, 10) : d.toISOString().slice(0, 19) + "Z");
   const libelleDate = (c, d) => (c.pas === "1j"
     ? fJourUTC.format(d)
@@ -113,6 +136,7 @@
     document.querySelectorAll(".couche").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.id === id)));
     viderCalques();
     etat.couche = c;
+    if (c.modele) { choisirModele(c); return; }
     if (!c.gibs) { $("temps").hidden = true; majLegende(); majGlobeDonnees(); return; }
     etat.dates = datesCouche(c);
     etat.calques = new Array(etat.dates.length).fill(null);
@@ -124,9 +148,39 @@
     majLegende();
   }
 
+  async function choisirModele(c) {
+    etat.modele = null;
+    $("temps").hidden = false;
+    $("temps-date").textContent = c.nom;
+    majEtat("Chargement du catalogue des modèles…");
+    let m = null;
+    try { m = await preparerModele(c); } catch (e) { m = null; }
+    if (etat.couche !== c) return;
+    if (!m) { majEtat("Produit pas encore disponible : il arrive automatiquement après le prochain run du modèle."); majLegende(); return; }
+    etat.modele = m;
+    etat.dates = m.images.map((f) => new Date(f.valide.replace("Z", ":00Z")));
+    etat.calques = new Array(etat.dates.length).fill(null);
+    const cur = $("temps-curseur");
+    cur.max = String(etat.dates.length - 1);
+    cur.value = "0";
+    afficher(0);
+    majLegende();
+    majGlobeDonnees();
+  }
+
   function calque(i) {
     if (etat.calques[i]) return etat.calques[i];
     const c = etat.couche;
+    if (c.modele) {
+      const l = L.imageOverlay(etat.modele.images[i].url, etat.modele.produit.bornes,
+        { pane: "donnees", opacity: 0, interactive: false, className: "image-modele" });
+      l._erreurs = 0; l._charge = false;
+      l.on("load", () => { l._charge = true; if (i === etat.index) majEtat(); });
+      l.on("error", () => { l._erreurs++; if (i === etat.index) majEtat(); });
+      l.addTo(carte);
+      etat.calques[i] = l;
+      return l;
+    }
     const l = wms(c.gibs, { time: tempsWms(c, etat.dates[i]), format: c.format, opacity: 0 });
     l._erreurs = 0; l._charge = false;
     l.on("loading", () => { l._erreurs = 0; l._charge = false; });
@@ -142,7 +196,8 @@
     const l = calque(i);
     etat.calques.forEach((x) => x && x.setOpacity(x === l ? 1 : 0));
     $("temps-curseur").value = String(i);
-    $("temps-date").textContent = libelleDate(etat.couche, etat.dates[i]);
+    $("temps-date").textContent = etat.couche.modele
+      ? libelleEcheance(etat.modele.images[i], etat.modele.source.run_utc) : libelleDate(etat.couche, etat.dates[i]);
     majEtat();
     if (vueGlobe()) majGlobeDonnees();
   }
@@ -151,7 +206,8 @@
     const e = $("temps-etat");
     if (texte) { e.textContent = texte; return; }
     const l = etat.calques[etat.index];
-    if (l && l._erreurs > 0) e.textContent = "Image pas encore publiée par la NASA : reculez d'un cran.";
+    if (l && l._erreurs > 0) e.textContent = etat.couche && etat.couche.modele
+      ? "Image indisponible pour cette échéance." : "Image pas encore publiée par la NASA : reculez d'un cran.";
     else if (l && !l._charge) e.textContent = "Chargement…";
     else e.textContent = `${etat.index + 1} / ${etat.dates.length}`;
   }
@@ -162,7 +218,7 @@
   }
 
   async function lancer() {
-    if (!etat.couche || !etat.couche.gibs) return;
+    if (!etat.couche || (!etat.couche.gibs && !(etat.couche.modele && etat.modele))) return;
     etat.lecture = true; iconeLecture(true);
     const n = etat.dates.length;
     if (!vueGlobe()) for (let i = 0; i < n; i++) calque(i);
@@ -202,6 +258,18 @@
       const img = c.legende
         ? `<img src="${SRC.gibsLegendes}${c.legende}_H.svg" alt="Légende de la couche ${c.nom}" onerror="this.remove()">` : "";
       blocs.push(`<div class="legende-bloc"><strong>${c.nom}</strong>${img}<p>${c.aide}</p><p>Source : ${c.source}</p></div>`);
+    }
+    if (c && c.modele) {
+      const m = etat.modele;
+      if (!m) blocs.push(`<div class="legende-bloc"><strong>${c.nom}</strong><p>${c.aide}</p></div>`);
+      else {
+        const p = m.produit, s = m.source;
+        blocs.push(`<div class="legende-bloc"><strong>${p.titre} (${p.unite})</strong><div class="legende-cases">${p.legende
+          .map((x) => `<span><i style="background:${x.couleur}"></i>${x.libelle}</span>`).join("")}</div>
+          <p>${c.aide}</p><p>${p.limites}</p>
+          <p>Source : ${s.source.nom}, run du ${s.run_utc.slice(8, 10)}/${s.run_utc.slice(5, 7)} à ${s.run_utc.slice(11, 13)} h UTC. ${s.source.credit}.</p>
+          ${vueGlobe() ? "<p>Couche visible en vue Carte.</p>" : ""}</div>`);
+      }
     }
     if ($("opt-vent").checked) {
       blocs.push(`<div class="legende-bloc"><strong>Vent prévu (nœuds)</strong><div class="legende-cases">${ECHELLE_VENT

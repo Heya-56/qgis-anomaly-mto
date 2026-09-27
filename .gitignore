@@ -2,3 +2,5 @@
 node_modules/
 .cdsapirc
 .dev.vars
+sortie/
+__pycache__/

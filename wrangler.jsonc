@@ -11,6 +11,15 @@
   "ratelimits": [
     { "name": "LIMITEUR", "namespace_id": "1001", "simple": { "limit": 60, "period": 60 } }
   ],
+  // Catalogue des données (traçabilité) et stockage des produits de modèles
+  "d1_databases": [
+    { "binding": "DB", "database_name": "atlas-pf-db", "database_id": "9d54c728-cb52-4025-a3cd-b002255f5456", "migrations_dir": "migrations" }
+  ],
+  "r2_buckets": [
+    { "binding": "DONNEES", "bucket_name": "atlas-pacifica-donnees" }
+  ],
+  // Recopie horaire des produits publiés par GitHub Actions
+  "triggers": { "crons": ["23 * * * *"] },
   "observability": {
     "enabled": true
   }

@@ -43,6 +43,11 @@ window.COUCHES = [
     legende: "AMSR_Wind_Speed", source: "GCOM-W1 AMSR2 via NASA GIBS",
     aide: "Vitesse du vent à la surface de l'océan, mesurée par satellite. Bandes vides entre deux passages."
   },
+  {
+    id: "cisaillement", nom: "Cisaillement vertical 200–850 hPa", detail: "Modèle ECMWF, analyse et prévision à 5 jours (m/s)",
+    modele: "cisaillement_200_850", source: "ECMWF Open Data (IFS), CC BY 4.0",
+    aide: "Différence de vent entre le bas (850 hPa, ~1,5 km) et le haut (200 hPa, ~12 km) de l'atmosphère. Un cisaillement faible (violet, moins de 10 m/s environ) laisse les nuages d'orage s'organiser en colonne : c'est l'un des ingrédients historiquement associés à la formation des cyclones. Un cisaillement fort (du bleu à l'orange) disperse la convection. Indicateur environnemental, pas une prévision de cyclone."
+  },
   { id: "aucune", nom: "Fond seul", detail: "Relief et bathymétrie Blue Marble", gibs: null }
 ];
 

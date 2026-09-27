@@ -1,0 +1,62 @@
+# Atlas Pacifica — ingestion automatique des sorties ECMWF (étape A).
+# Toutes les 6 heures : télécharge le dernier run ECMWF IFS (ECMWF Open Data, CC BY 4.0), calcule les produits
+# (cisaillement 200–850 hPa), et les publie dans la release « donnees-modeles » de ce dépôt.
+# Le Worker Cloudflare les recopie ensuite dans R2 et les inscrit au catalogue D1 (aucun secret nécessaire).
+name: Modèles ECMWF
+
+on:
+  schedule:
+    - cron: "40 1,7,13,19 * * *"
+  workflow_dispatch:
+    inputs:
+      run:
+        description: "Run à forcer (AAAAMMJJHH), vide = dernier disponible"
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: modeles-ecmwf
+  cancel-in-progress: false
+
+jobs:
+  ingestion:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Dépendances
+        run: pip install --quiet eccodes ecmwf-opendata numpy
+
+      - name: Run déjà publié
+        id: publie
+        run: |
+          RUN=$(curl -sfL "https://github.com/${{ github.repository }}/releases/download/donnees-modeles/catalogue.json" | jq -r '.run_utc // empty' || true)
+          echo "run=$RUN" >> "$GITHUB_OUTPUT"
+          echo "Déjà publié : ${RUN:-aucun}"
+
+      - name: Calcul des produits
+        run: |
+          ARGS="--sortie sortie"
+          if [ -n "${{ github.event.inputs.run }}" ]; then ARGS="$ARGS --run ${{ github.event.inputs.run }}"; fi
+          if [ -n "${{ steps.publie.outputs.run }}" ] && [ -z "${{ github.event.inputs.run }}" ]; then ARGS="$ARGS --deja-publie ${{ steps.publie.outputs.run }}"; fi
+          python pipeline/modeles_ecmwf.py $ARGS
+
+      - name: Publication
+        if: hashFiles('sortie/RIEN_DE_NEUF') == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view donnees-modeles >/dev/null 2>&1 || gh release create donnees-modeles \
+            --title "Données modèles (automatique)" \
+            --notes "Produits calculés automatiquement à partir d'ECMWF Open Data (CC BY 4.0). Ne pas modifier à la main." \
+            --latest=false
+          # les fichiers d'abord, le catalogue en dernier : le Worker ne voit jamais un catalogue incomplet
+          gh release upload donnees-modeles sortie/*.png sortie/*_grille.json --clobber
+          gh release upload donnees-modeles sortie/catalogue.json --clobber
