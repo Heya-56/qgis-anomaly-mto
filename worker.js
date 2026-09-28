@@ -277,6 +277,32 @@ async function mjo() {
     dernier: { ...d, active: d.amplitude >= 1, region: REGIONS_MJO[d.phase] }, jours, mise_a_jour: new Date().toISOString() });
 }
 
+/* Disponibilité réelle des couches NASA GIBS : date de la dernière image publiée (service DescribeDomains).
+   Les produits quotidiens arrivent avec 1 à 3 jours de retard, variable : on demande plutôt que de deviner. */
+const COUCHES_GIBS = new Set(["GOES-West_ABI_GeoColor", "GOES-West_ABI_Band13_Clean_Infrared", "IMERG_Precipitation_Rate_30min",
+  "IMERG_Precipitation_Rate", "GHRSST_L4_MUR_Sea_Surface_Temperature", "GHRSST_L4_MUR_Sea_Surface_Temperature_Anomalies", "AMSRU2_Wind_Speed_Day"]);
+async function gibsDispo(url) {
+  const couche = url.searchParams.get("couche") || "";
+  if (!COUCHES_GIBS.has(couche)) return repondre({ erreur: "Couche inconnue" }, 400);
+  const j = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+  for (const ms of ["2km", "1km"]) {
+    try {
+      const r = await fetch(`https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/1.0.0/${couche}/default/${ms}/all/${j(-10)}--${j(1)}.xml`,
+        { cf: { cacheTtl: 1800 } });
+      if (!r.ok) continue;
+      const texte = await r.text();
+      const dom = [...texte.matchAll(/<Domain>([^<]+)<\/Domain>/g)].map((m) => m[1]).join(",");
+      const intervalles = dom.split(",").map((x) => x.trim()).filter(Boolean);
+      if (!intervalles.length) continue;
+      const dernier = intervalles[intervalles.length - 1].split("/");
+      const fin = dernier.length >= 2 ? dernier[1] : dernier[0];
+      if (!/^\d{4}-\d{2}-\d{2}/.test(fin)) continue;
+      return repondre({ couche, derniere: fin, source: "NASA GIBS DescribeDomains" });
+    } catch (e) { /* essai suivant */ }
+  }
+  return repondre({ erreur: "NASA GIBS indisponible" }, 502);
+}
+
 const ROUTES = {
   "/api/cyclones-actifs": { duree: 900, produire: cyclonesActifs },
   "/api/enso-type": { duree: 43200, produire: ensoType },
@@ -302,6 +328,14 @@ export default {
         if (!success) return repondre({ erreur: "Trop de requêtes, réessayez dans une minute." }, 429, { "retry-after": "60" });
       }
       return avecCache(request, ctx, url.pathname, route.duree, route.produire);
+    }
+    if (url.pathname === "/api/gibs-dispo") {
+      if (env.LIMITEUR) {
+        const { success } = await env.LIMITEUR.limit({ key: request.headers.get("cf-connecting-ip") || "inconnu" });
+        if (!success) return repondre({ erreur: "Trop de requêtes, réessayez dans une minute." }, 429, { "retry-after": "60" });
+      }
+      const couche = url.searchParams.get("couche") || "";
+      return avecCache(request, ctx, `/api/gibs-dispo?couche=${encodeURIComponent(couche)}`, 1800, () => gibsDispo(url));
     }
     if (url.pathname === "/api/catalogue" || url.pathname.startsWith("/donnees/")) {
       if (env.LIMITEUR) {

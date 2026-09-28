@@ -73,15 +73,35 @@
   const etat = { couche: null, dates: [], index: 0, calques: [], lecture: false, minuterie: null };
 
   function pasMs(p) { return p === "10min" ? 6e5 : p === "30min" ? 18e5 : 864e5; }
-  function datesCouche(c) {
+  /* Dernière image réellement publiée par la NASA (Worker /api/gibs-dispo), mémorisée 30 min. */
+  const dispo = {};
+  async function derniereDispo(c) {
+    const m = dispo[c.gibs];
+    if (m && Date.now() - m.t < 18e5) return m.d;
+    try {
+      const ctrl = new AbortController(); const minut = setTimeout(() => ctrl.abort(), 4000);
+      const r = await fetch(`api/gibs-dispo?couche=${encodeURIComponent(c.gibs)}`, { signal: ctrl.signal });
+      clearTimeout(minut);
+      if (!r.ok) return null;
+      const j = await r.json();
+      const d = new Date(j.derniere.length === 10 ? j.derniere + "T00:00:00Z" : j.derniere);
+      if (isNaN(d)) return null;
+      dispo[c.gibs] = { d, t: Date.now() };
+      return d;
+    } catch (e) { return null; }
+  }
+  function datesCouche(c, fin) {
     const out = [];
     if (c.pas === "1j") {
       const d = new Date(); d.setUTCHours(0, 0, 0, 0); d.setUTCDate(d.getUTCDate() - c.latence_j);
+      if (fin) { const f = new Date(fin); f.setUTCHours(0, 0, 0, 0); if (f < d) d.setTime(f.getTime()); }
       for (let i = c.images - 1; i >= 0; i--) { const x = new Date(d); x.setUTCDate(d.getUTCDate() - i); out.push(x); }
     } else {
       const p = pasMs(c.pas);
-      const fin = Math.floor((Date.now() - c.latence_min * 6e4) / p) * p;
-      for (let i = c.images - 1; i >= 0; i--) out.push(new Date(fin - i * p));
+      let limite = Date.now() - c.latence_min * 6e4;
+      if (fin) limite = Math.min(limite, fin.getTime());
+      const dernier = Math.floor(limite / p) * p;
+      for (let i = c.images - 1; i >= 0; i--) out.push(new Date(dernier - i * p));
     }
     return out;
   }
@@ -145,7 +165,15 @@
     etat.couche = c;
     if (c.modele) { choisirModele(c); return; }
     if (!c.gibs) { $("temps").hidden = true; majLegende(); majGlobeDonnees(); return; }
-    etat.dates = datesCouche(c);
+    choisirGibs(c);
+  }
+
+  async function choisirGibs(c) {
+    $("temps").hidden = false;
+    majEtat("Recherche de la dernière image publiée par la NASA…");
+    const fin = await derniereDispo(c);
+    if (etat.couche !== c) return;
+    etat.dates = datesCouche(c, fin);
     etat.calques = new Array(etat.dates.length).fill(null);
     const cur = $("temps-curseur");
     cur.max = String(etat.dates.length - 1);
@@ -945,7 +973,7 @@
   function majGlobeDonnees() {
     if (!globe.pret) return;
     const m = globe.map, c = etat.couche;
-    if (!c || !c.gibs) {
+    if (!c || !c.gibs || !etat.dates[etat.index]) {
       if (m.getLayer("donnees")) m.removeLayer("donnees");
       if (m.getSource("donnees")) m.removeSource("donnees");
       return;
