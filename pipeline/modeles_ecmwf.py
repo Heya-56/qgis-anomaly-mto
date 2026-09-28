@@ -37,7 +37,7 @@ OPACITE = 185  # sur 255
 # Requêtes ECMWF Open Data, faites séparément : si l'une échoue, les autres produits sont quand même publiés.
 REQUETES = {
     "niveaux": dict(type="fc", levtype="pl", param=["u", "v", "r", "vo"], levelist=[850, 700, 500, 200]),
-    "surface": dict(type="fc", levtype="sfc", param=["msl", "tcwv"]),
+    "surface": dict(type="fc", levtype="sfc", param=["msl", "tcwv", "10u", "10v"]),
 }
 
 # Chaque produit : champs nécessaires, calcul, unité, paliers de légende (de, à, couleur, libellé), méthode, limites.
@@ -80,6 +80,14 @@ PRODUITS = {
                  (1025, None, "#2a4fa8", "> 1025")],
         methode="Pression réduite au niveau de la mer du modèle IFS (0,25°).",
         limites="Les creux de petite taille (cyclones) peuvent être sous-estimés par un modèle global."),
+    "vent_10m": dict(
+        titre="Vent à 10 m (modèle)", unite="nœuds",
+        champs=[("10u", 0), ("10v", 0)], calcul=lambda c: np.hypot(c[("10u", 0)], c[("10v", 0)]) * 1.943844,
+        paliers=[(0, 10, None, "< 10"), (10, 20, "#7fc6a4", "10–20"), (20, 34, "#f2d38a", "20–34"),
+                 (34, 48, "#f29a4a", "34–47 (tempête)"), (48, 64, "#e5484d", "48–63 (forte tempête)"),
+                 (64, None, "#c21a5b", "≥ 64 (ouragan)")],
+        methode="Vitesse du vent à 10 m du modèle IFS (0,25°), convertie en nœuds.",
+        limites="Vent moyen du modèle, pas une mesure ; les rafales et le vent au cœur d'un cyclone sont sous-estimés."),
     "eau_precipitable": dict(
         titre="Eau précipitable (colonne totale)", unite="mm",
         champs=[("tcwv", 0)], calcul=lambda c: c[("tcwv", 0)],

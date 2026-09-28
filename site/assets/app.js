@@ -173,6 +173,15 @@
     majEtat("Recherche de la dernière image publiée par la NASA…");
     const fin = await derniereDispo(c);
     if (etat.couche !== c) return;
+    // Couche que la NASA ne met plus à jour : on le dit clairement au lieu d'afficher une carte vide.
+    const retardMax = c.pas === "1j" ? 10 * 864e5 : 2 * 864e5;
+    if (fin && Date.now() - fin.getTime() > retardMax) {
+      etat.dates = []; etat.calques = [];
+      $("temps-date").textContent = c.nom;
+      majEtat(`La NASA ne publie plus cette couche depuis le ${fJourUTC.format(fin)}. Choisissez une autre couche.`);
+      majLegende();
+      return;
+    }
     etat.dates = datesCouche(c, fin);
     etat.calques = new Array(etat.dates.length).fill(null);
     const cur = $("temps-curseur");

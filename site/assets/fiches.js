@@ -65,6 +65,14 @@ window.FICHES = {
     limites: "C'est l'eau disponible, pas la pluie qui tombera : il faut un mécanisme qui soulève l'air pour qu'il pleuve.",
     couche: "eauPrecipitable"
   },
+  vent10m: {
+    titre: "Vent à 10 m",
+    definition: "La vitesse du vent moyen à 10 mètres au-dessus de la mer, calculée par le modèle ECMWF, en nœuds (1 nœud = 1,852 km/h).",
+    importance: "C'est le vent qui fait la mer et la houle, et qui touche les îles. Les seuils marins sont universels : 34 nœuds pour une tempête tropicale, 64 nœuds pour la force ouragan (cyclone tropical).",
+    lecture: "Transparent : vent faible (moins de 10 nœuds). Du vert à l'orange : vent qui forcit. Rouge et pourpre : vents de tempête et d'ouragan, à surveiller dans les bulletins officiels de Météo-France.",
+    limites: "Vent moyen d'un modèle global à 25 km de résolution : les rafales, les effets de relief et le cœur d'un cyclone sont sous-estimés. Ce n'est pas une mesure ni une alerte.",
+    couche: "vent10m"
+  },
   enso: {
     titre: "ENSO · El Niño et La Niña",
     definition: "El Niño–Oscillation australe : une variation naturelle, sur plusieurs mois à quelques années, de la température de l'océan Pacifique équatorial et des vents qui l'accompagnent. L'indice ONI (NOAA) mesure l'anomalie de température dans la zone Niño 3.4.",

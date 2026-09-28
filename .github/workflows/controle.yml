@@ -1,0 +1,47 @@
+# Atlas Pacifica — contrôle de santé quotidien du site en ligne.
+# Chaque matin (7 h 05, heure de Tahiti) : vérifie que chaque couche et chaque source affiche des données récentes.
+# En cas de problème : ouvre (ou met à jour) un ticket GitHub « Contrôle quotidien » → notification à la propriétaire du dépôt.
+# Quand tout redevient normal : le ticket est fermé automatiquement.
+name: Contrôle quotidien
+
+on:
+  schedule:
+    - cron: "5 17 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  controle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Vérification du site en ligne
+        id: controle
+        run: |
+          set +e
+          node tests/controle.mjs > rapport.md
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+          cat rapport.md >> "$GITHUB_STEP_SUMMARY"
+          cat rapport.md
+
+      - name: Ticket GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TITRE="Contrôle quotidien : problème détecté sur Atlas Pacifica"
+          NUM=$(gh issue list --state open --search "in:title \"$TITRE\"" --json number --jq '.[0].number')
+          if [ "${{ steps.controle.outputs.code }}" != "0" ]; then
+            if [ -n "$NUM" ]; then gh issue comment "$NUM" --body-file rapport.md
+            else gh issue create --title "$TITRE" --body-file rapport.md; fi
+            exit 1
+          elif [ -n "$NUM" ]; then
+            gh issue close "$NUM" --comment "Tout est revenu à la normale. $(date -u +'%Y-%m-%d %H:%M UTC')"
+          fi

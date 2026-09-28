@@ -1,0 +1,34 @@
+# Atlas Pacifica — tests automatiques à chaque modification du dépôt.
+# Un échec apparaît en rouge sur GitHub (et par e-mail) : c'est le signal de ne pas laisser la version en ligne telle quelle.
+name: Vérification
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Syntaxe JavaScript
+        run: for f in worker.js site/sw.js site/assets/*.js; do node --check "$f" || exit 1; done
+
+      - name: Syntaxe Python
+        run: python -m py_compile pipeline/*.py
+
+      - name: Tests de cohérence et du Worker
+        run: node --test tests/*.test.mjs

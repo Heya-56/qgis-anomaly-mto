@@ -280,7 +280,7 @@ async function mjo() {
 /* Disponibilité réelle des couches NASA GIBS : date de la dernière image publiée (service DescribeDomains).
    Les produits quotidiens arrivent avec 1 à 3 jours de retard, variable : on demande plutôt que de deviner. */
 const COUCHES_GIBS = new Set(["GOES-West_ABI_GeoColor", "GOES-West_ABI_Band13_Clean_Infrared", "IMERG_Precipitation_Rate_30min",
-  "IMERG_Precipitation_Rate", "GHRSST_L4_MUR_Sea_Surface_Temperature", "GHRSST_L4_MUR_Sea_Surface_Temperature_Anomalies", "AMSRU2_Wind_Speed_Day"]);
+  "IMERG_Precipitation_Rate", "GHRSST_L4_MUR_Sea_Surface_Temperature", "GHRSST_L4_MUR_Sea_Surface_Temperature_Anomalies"]);
 async function gibsDispo(url) {
   const couche = url.searchParams.get("couche") || "";
   if (!COUCHES_GIBS.has(couche)) return repondre({ erreur: "Couche inconnue" }, 400);
