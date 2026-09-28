@@ -56,7 +56,13 @@ await verifier("Modèle ECMWF (catalogue)", async () => {
   const a = age(s.run_utc.replace("Z", ":00Z"));
   if (a > 30 * H) throw new Error(`dernier run ${s.run_utc}, il y a ${jours(a)} (GitHub Actions ou la copie vers R2 est bloquée)`);
   const manquants = COUCHES.filter((c) => c.modele && !(s.produits && s.produits[c.modele])).map((c) => c.modele);
-  if (manquants.length) throw new Error(`produits absents du dernier run : ${manquants.join(", ")}`);
+  if (manquants.length) {
+    // Normal juste après l'ajout d'un produit : il arrive avec le run en cours de copie.
+    const enCours = (cat.journal || []).find((l) => l.statut === "en_cours" && age(l.quand) < H);
+    const texte = `produits absents du dernier run complet : ${manquants.join(", ")}`;
+    if (enCours) alertes.push(`Modèle ECMWF : ${texte} (copie en cours : ${enCours.message})`);
+    else throw new Error(texte);
+  }
   const erreurCopie = (cat.journal || []).find((l) => l.statut === "erreur" && age(l.quand) < 6 * H);
   if (erreurCopie) alertes.push(`Copie ECMWF : ${erreurCopie.message} (${erreurCopie.quand})`);
   return `run ${s.run_utc}, ${Object.keys(s.produits).length} produits`;

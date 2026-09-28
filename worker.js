@@ -165,6 +165,14 @@ async function synchroniser(env) {
   if (!run) {
     await env.DB.prepare("INSERT OR IGNORE INTO runs (id, source_id, run_utc, recu_le, statut, manifeste) VALUES (?, ?, ?, ?, 'partiel', '{}')")
       .bind(runId, source, cat.run_utc, new Date().toISOString()).run();
+    // Un run plus récent a remplacé la publication : les copies inachevées des runs précédents sont abandonnées et effacées.
+    const abandonnes = await env.DB.prepare("SELECT id FROM runs WHERE source_id = ? AND statut = 'partiel' AND id != ?").bind(source, runId).all();
+    for (const { id } of abandonnes.results || []) {
+      const cles = ((await env.DB.prepare("SELECT cle FROM fichiers WHERE run_id = ?").bind(id).all()).results || []).map((x) => x.cle);
+      if (cles.length) await env.DONNEES.delete(cles);
+      await env.DB.batch([env.DB.prepare("DELETE FROM fichiers WHERE run_id = ?").bind(id), env.DB.prepare("DELETE FROM runs WHERE id = ?").bind(id)]);
+      await journal(env, source, "abandon", `${id} : copie inachevée remplacée par ${runId}`);
+    }
   }
 
   const faits = new Set(((await env.DB.prepare("SELECT cle FROM fichiers WHERE run_id = ?").bind(runId).all()).results || []).map((x) => x.cle));
