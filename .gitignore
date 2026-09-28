@@ -4,3 +4,5 @@ node_modules/
 .dev.vars
 sortie/
 __pycache__/
+auto-hebergement/node_modules/
+donnees-locales/

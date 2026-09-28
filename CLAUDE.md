@@ -19,6 +19,7 @@ Propriétaire : Heianui Tapare (Hinova Digital). En ligne : https://qgis-anomaly
   - Tâche toutes les 5 min (cron `*/5 * * * *`) : recopie progressive (4 fichiers par passage, limite CPU gratuite) de la release GitHub `donnees-modeles` dans R2 après vérification SHA-256 et l'inscrit dans D1.
   - Limitation 60 req/min/IP sur les routes dynamiques.
 - `pipeline/modeles_ecmwf.py` + `.github/workflows/modeles.yml` : toutes les 6 h, dernier run ECMWF IFS (Open Data) → 7 produits (cisaillement, humidité 700/500, vorticité 850, pression mer, eau précipitable, vent 10 m : PNG Web Mercator + `grilles.json` 1° + `catalogue.json`) → release `donnees-modeles`.
+- `auto-hebergement/` : même code servi hors Cloudflare (Node 22 : `serveur.mjs` émule ASSETS, D1→SQLite, R2→dossier, cron→minuteur ; `Dockerfile`, `docker-compose.yml`, `LISEZMOI.md`). Toute modification de `worker.js` doit rester compatible (test `tests/auto-hebergement.test.mjs` + job Docker de « Vérification »). Le site reste public pour tous ; l'auto-hébergement sert aux organisations dont le réseau bloque `workers.dev`.
 - D1 `atlas-pf-db` (schéma : `migrations/0001_catalogue.sql`), R2 `atlas-pacifica-donnees`.
 - Pipeline climatologique local (ERA5, IBTrACS, épisodes El Niño) : projet `atlas-enso-pf` sur le PC, `07_export_web.py` écrit dans `site/data/`.
 

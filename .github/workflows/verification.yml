@@ -32,3 +32,21 @@ jobs:
 
       - name: Tests de cohérence et du Worker
         run: node --test tests/*.test.mjs
+
+  docker:
+    # L'image auto-hébergée se construit, démarre et répond (ce que Météo-France ou tout autre service installerait).
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construction de l'image
+        run: docker build -f auto-hebergement/Dockerfile -t atlas-pacifica .
+      - name: Démarrage et vérification
+        run: |
+          docker run -d --name atlas -p 8080:8080 atlas-pacifica
+          for i in $(seq 1 30); do curl -sf http://localhost:8080/ >/dev/null && break; sleep 2; done
+          curl -sf http://localhost:8080/ | grep -q "Atlas Pacifica"
+          curl -sf http://localhost:8080/api/catalogue >/dev/null
+          sleep 20
+          curl -s http://localhost:8080/api/catalogue | head -c 400; echo
+          docker logs atlas

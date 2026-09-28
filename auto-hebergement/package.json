@@ -1,0 +1,9 @@
+{
+  "name": "atlas-pacifica-auto-hebergement",
+  "private": true,
+  "description": "Atlas Pacifica sur votre propre serveur (Node.js 22), même code que le site public.",
+  "type": "module",
+  "engines": { "node": ">=22.13" },
+  "scripts": { "start": "node --no-warnings serveur.mjs" },
+  "dependencies": { "undici": "^7.0.0" }
+}

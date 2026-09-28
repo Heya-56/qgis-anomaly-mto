@@ -182,7 +182,8 @@ async function synchroniser(env) {
   }
   const restants = attendus.filter((x) => !faits.has(x.cle));
 
-  for (const { f, cle } of restants.slice(0, FICHIERS_PAR_PASSAGE)) {
+  const parPassage = Number(env.FICHIERS_PAR_PASSAGE) || FICHIERS_PAR_PASSAGE;
+  for (const { f, cle } of restants.slice(0, parPassage)) {
     const r = await fetch(RELEASE + encodeURIComponent(f.nom), { cf: { cacheTtl: 0 } });
     if (!r.ok) { await journal(env, source, "erreur", `${f.nom} HTTP ${r.status}`); return; }
     const buf = await r.arrayBuffer();
@@ -195,8 +196,8 @@ async function synchroniser(env) {
       .bind(cle, runId, String(f.produit || ""), Number.isFinite(f.echeance_h) ? f.echeance_h : null, f.valide_utc || null, type, buf.byteLength, f.sha256).run();
   }
 
-  if (restants.length > FICHIERS_PAR_PASSAGE) {
-    await journal(env, source, "en_cours", `${runId} : ${attendus.length - restants.length + FICHIERS_PAR_PASSAGE}/${attendus.length} fichiers`);
+  if (restants.length > parPassage) {
+    await journal(env, source, "en_cours", `${runId} : ${attendus.length - restants.length + parPassage}/${attendus.length} fichiers`);
     return;
   }
 

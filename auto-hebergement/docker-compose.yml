@@ -1,0 +1,19 @@
+# Atlas Pacifica — lancement en une commande :  docker compose -f auto-hebergement/docker-compose.yml up -d
+# Puis ouvrir http://<serveur>:8080
+services:
+  atlas-pacifica:
+    build:
+      context: ..
+      dockerfile: auto-hebergement/Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - donnees:/donnees
+    environment:
+      PORT: "8080"
+      # Derrière un proxy d'entreprise, décommenter et adapter :
+      # HTTPS_PROXY: "http://proxy.exemple.fr:8080"
+      # NO_PROXY: "localhost,127.0.0.1"
+    restart: unless-stopped
+volumes:
+  donnees:
