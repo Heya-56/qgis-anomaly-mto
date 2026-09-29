@@ -290,14 +290,31 @@ async function mjo() {
    Les produits quotidiens arrivent avec 1 à 3 jours de retard, variable : on demande plutôt que de deviner. */
 const COUCHES_GIBS = new Set(["GOES-West_ABI_GeoColor", "GOES-West_ABI_Band13_Clean_Infrared", "IMERG_Precipitation_Rate_30min",
   "IMERG_Precipitation_Rate", "GHRSST_L4_MUR_Sea_Surface_Temperature", "GHRSST_L4_MUR_Sea_Surface_Temperature_Anomalies"]);
+/* Liste les jours réellement publiés : la NASA laisse parfois des trous (ex. 25 et 27 publiés, pas le 26). */
+function joursPublies(intervalles, depuis) {
+  const jours = [];
+  for (const iv of intervalles) {
+    const [debut, fin, pas] = iv.split("/");
+    if (!fin || pas !== "P1D") { if (/^\d{4}-\d{2}-\d{2}$/.test(iv)) jours.push(iv); continue; }
+    for (let t = Math.max(Date.parse(debut.slice(0, 10) + "T00:00:00Z"), depuis); t <= Date.parse(fin.slice(0, 10) + "T00:00:00Z"); t += 864e5) {
+      jours.push(new Date(t).toISOString().slice(0, 10));
+    }
+  }
+  return [...new Set(jours)].sort();
+}
+
 async function gibsDispo(url) {
   const couche = url.searchParams.get("couche") || "";
   if (!COUCHES_GIBS.has(couche)) return repondre({ erreur: "Couche inconnue" }, 400);
   const j = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
-  for (const ms of ["2km", "1km"]) {
+  const debut = Date.now() - 45 * 864e5;
+  // Même projection que la carte (Web Mercator, EPSG:3857) ; repli sur EPSG:4326.
+  const essais = ["GoogleMapsCompatible_Level6", "GoogleMapsCompatible_Level7", "GoogleMapsCompatible_Level8"]
+    .map((ms) => `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/1.0.0/${couche}/default/${ms}/all/${j(-45)}--${j(1)}.xml`)
+    .concat(["2km", "1km"].map((ms) => `https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/1.0.0/${couche}/default/${ms}/all/${j(-45)}--${j(1)}.xml`));
+  for (const u of essais) {
     try {
-      const r = await fetch(`https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/1.0.0/${couche}/default/${ms}/all/${j(-10)}--${j(1)}.xml`,
-        { cf: { cacheTtl: 1800 } });
+      const r = await fetch(u, { cf: { cacheTtl: 1800 } });
       if (!r.ok) continue;
       const texte = await r.text();
       const dom = [...texte.matchAll(/<Domain>([^<]+)<\/Domain>/g)].map((m) => m[1]).join(",");
@@ -306,7 +323,8 @@ async function gibsDispo(url) {
       const dernier = intervalles[intervalles.length - 1].split("/");
       const fin = dernier.length >= 2 ? dernier[1] : dernier[0];
       if (!/^\d{4}-\d{2}-\d{2}/.test(fin)) continue;
-      return repondre({ couche, derniere: fin, source: "NASA GIBS DescribeDomains" });
+      const jours = intervalles.some((x) => x.endsWith("/P1D")) ? joursPublies(intervalles, debut) : undefined;
+      return repondre({ couche, derniere: fin, jours, source: "NASA GIBS DescribeDomains" });
     } catch (e) { /* essai suivant */ }
   }
   return repondre({ erreur: "NASA GIBS indisponible" }, 502);

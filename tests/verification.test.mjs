@@ -78,6 +78,14 @@ test("Worker : dernière image NASA lue dans DescribeDomains", async () => {
   assert.equal((await appel("/api/gibs-dispo?couche=inconnue")).status, 400);
 });
 
+test("Worker : les jours manquants chez la NASA sont exclus (trous dans la série)", async () => {
+  const j = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+  globalThis.fetch = async () => new Response(`<Domain>${j(-5)}/${j(-3)}/P1D,${j(-1)}/${j(-1)}/P1D</Domain>`);
+  const r = await (await appel("/api/gibs-dispo?couche=GHRSST_L4_MUR_Sea_Surface_Temperature_Anomalies")).json();
+  assert.equal(r.derniere, j(-1));
+  assert.deepEqual(r.jours, [j(-5), j(-4), j(-3), j(-1)]);
+});
+
 test("Worker : cyclones en cours filtrés sur 48 h et textes nettoyés", async () => {
   const maintenant = new Date().toISOString();
   globalThis.fetch = async (u) => String(u).includes("geteventlist")

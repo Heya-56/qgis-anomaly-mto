@@ -86,12 +86,17 @@
       const j = await r.json();
       const d = new Date(j.derniere.length === 10 ? j.derniere + "T00:00:00Z" : j.derniere);
       if (isNaN(d)) return null;
+      d.jours = Array.isArray(j.jours) ? j.jours : null;   // jours réellement publiés (produits quotidiens)
       dispo[c.gibs] = { d, t: Date.now() };
       return d;
     } catch (e) { return null; }
   }
   function datesCouche(c, fin) {
     const out = [];
+    // Produits quotidiens : uniquement les jours que la NASA a réellement publiés (elle laisse parfois des trous).
+    if (c.pas === "1j" && fin && fin.jours && fin.jours.length) {
+      return fin.jours.slice(-c.images).map((x) => new Date(x + "T00:00:00Z"));
+    }
     if (c.pas === "1j") {
       const d = new Date(); d.setUTCHours(0, 0, 0, 0); d.setUTCDate(d.getUTCDate() - c.latence_j);
       if (fin) { const f = new Date(fin); f.setUTCHours(0, 0, 0, 0); if (f < d) d.setTime(f.getTime()); }
@@ -147,7 +152,11 @@
       b.className = "couche"; b.type = "button"; b.setAttribute("role", "radio");
       b.setAttribute("aria-checked", "false"); b.dataset.id = c.id;
       b.innerHTML = `<strong>${c.nom}</strong><small>${c.detail}</small><span class="pastille" aria-hidden="true"></span>`;
-      b.addEventListener("click", () => choisirCouche(c.id));
+      b.addEventListener("click", () => {
+        choisirCouche(c.id);
+        // Sur téléphone, on referme le panneau pour montrer la carte tout de suite.
+        if (window.matchMedia("(max-width: 820px)").matches) $("rail").classList.remove("ouvert");
+      });
       box.appendChild(b);
     });
   }

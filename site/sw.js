@@ -2,7 +2,7 @@
    - Coquille de l'application : mise en cache à l'installation, servie hors ligne.
    - Données (data/*.json, /api/*) : réseau d'abord, sinon dernière copie connue.
    - Tuiles satellite NASA GIBS : non stockées (réponses opaques trop lourdes pour le stockage d'un téléphone). */
-const VERSION = "atlas-pacifica-v7";
+const VERSION = "atlas-pacifica-v8";
 const COQUILLE = `${VERSION}-coquille`;
 const DONNEES = `${VERSION}-donnees`;
 
@@ -68,6 +68,9 @@ self.addEventListener("fetch", (e) => {
   if (url.origin === self.location.origin) {
     if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/data/")) {
       e.respondWith(reseauDabord(req, DONNEES));
+    } else if (/\.(js|css|webmanifest)$/.test(url.pathname) && !url.pathname.startsWith("/vendor/")) {
+      // Code de l'application : toujours la version en ligne si possible, la copie locale seulement hors ligne.
+      e.respondWith(reseauDabord(req, COQUILLE));
     } else if (req.mode === "navigate") {
       e.respondWith(fetch(req).then((r) => {
         if (r.ok && !r.redirected && url.pathname === "/") {
