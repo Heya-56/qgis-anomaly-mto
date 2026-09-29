@@ -362,7 +362,7 @@ export default {
         if (!success) return repondre({ erreur: "Trop de requêtes, réessayez dans une minute." }, 429, { "retry-after": "60" });
       }
       const couche = url.searchParams.get("couche") || "";
-      return avecCache(request, ctx, `/api/gibs-dispo?couche=${encodeURIComponent(couche)}`, 1800, () => gibsDispo(url));
+      return avecCache(request, ctx, `/api/gibs-dispo?format=2&couche=${encodeURIComponent(couche)}`, 1800, () => gibsDispo(url));
     }
     if (url.pathname === "/api/catalogue" || url.pathname.startsWith("/donnees/")) {
       if (env.LIMITEUR) {
