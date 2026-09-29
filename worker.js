@@ -312,19 +312,20 @@ async function gibsDispo(url) {
   const essais = ["GoogleMapsCompatible_Level6", "GoogleMapsCompatible_Level7", "GoogleMapsCompatible_Level8"]
     .map((ms) => `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/1.0.0/${couche}/default/${ms}/all/${j(-45)}--${j(1)}.xml`)
     .concat(["2km", "1km"].map((ms) => `https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/1.0.0/${couche}/default/${ms}/all/${j(-45)}--${j(1)}.xml`));
+  const diagnostic = [];
   for (const u of essais) {
     try {
       const r = await fetch(u, { cf: { cacheTtl: 1800 } });
-      if (!r.ok) continue;
+      if (!r.ok) { diagnostic.push(`${u.split("/").slice(3, 4)}/${u.split("/")[9]} HTTP ${r.status}`); continue; }
       const texte = await r.text();
       const dom = [...texte.matchAll(/<Domain>([^<]+)<\/Domain>/g)].map((m) => m[1]).join(",");
       const intervalles = dom.split(",").map((x) => x.trim()).filter(Boolean);
-      if (!intervalles.length) continue;
+      if (!intervalles.length) { diagnostic.push(`${u.split("/")[9]} domaine vide`); continue; }
       const dernier = intervalles[intervalles.length - 1].split("/");
       const fin = dernier.length >= 2 ? dernier[1] : dernier[0];
       if (!/^\d{4}-\d{2}-\d{2}/.test(fin)) continue;
       const jours = intervalles.some((x) => x.endsWith("/P1D")) ? joursPublies(intervalles, debut) : undefined;
-      return repondre({ couche, derniere: fin, jours, source: "NASA GIBS DescribeDomains" });
+      return repondre({ couche, derniere: fin, jours, source: "NASA GIBS DescribeDomains", projection: u.split("/")[4], diagnostic });
     } catch (e) { /* essai suivant */ }
   }
   return repondre({ erreur: "NASA GIBS indisponible" }, 502);
@@ -362,7 +363,7 @@ export default {
         if (!success) return repondre({ erreur: "Trop de requêtes, réessayez dans une minute." }, 429, { "retry-after": "60" });
       }
       const couche = url.searchParams.get("couche") || "";
-      return avecCache(request, ctx, `/api/gibs-dispo?format=2&couche=${encodeURIComponent(couche)}`, 1800, () => gibsDispo(url));
+      return avecCache(request, ctx, `/api/gibs-dispo?format=3&couche=${encodeURIComponent(couche)}`, 1800, () => gibsDispo(url));
     }
     if (url.pathname === "/api/catalogue" || url.pathname.startsWith("/donnees/")) {
       if (env.LIMITEUR) {
