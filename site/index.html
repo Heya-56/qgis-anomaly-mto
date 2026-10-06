@@ -109,10 +109,11 @@
     </div>
     <p class="maj-dispo" id="maj-dispo" role="status" hidden>Nouvelle version d'Atlas Pacifica disponible.
       <button type="button" class="btn" id="maj-appliquer">Mettre à jour</button></p>
-    <button class="btn rail-ouvrir" id="rail-ouvrir" aria-controls="rail">Couches</button>
+    <button class="btn rail-ouvrir" id="rail-ouvrir" aria-controls="rail" aria-expanded="false"><span aria-hidden="true">☰</span> Couches<span class="rail-ouvrir-couche" id="rail-ouvrir-couche"></span></button>
     <p class="astuce" id="astuce">Cliquez sur la carte pour analyser un point : pluie, température et vent sur 60 jours + 7 jours de prévision.</p>
 
     <div class="legende" id="legende" aria-live="polite"></div>
+    <button type="button" class="btn legende-puce" id="legende-puce" aria-controls="legende" hidden>Légende</button>
 
     <div class="temps" id="temps" hidden>
       <button class="btn-rond" id="lecture" aria-label="Lancer l'animation">

@@ -2,7 +2,7 @@
    - Coquille de l'application : mise en cache à l'installation, servie hors ligne.
    - Données (data/*.json, /api/*) : réseau d'abord, sinon dernière copie connue.
    - Tuiles satellite NASA GIBS : non stockées (réponses opaques trop lourdes pour le stockage d'un téléphone). */
-const VERSION = "atlas-pacifica-v8";
+const VERSION = "atlas-pacifica-v9";
 const COQUILLE = `${VERSION}-coquille`;
 const DONNEES = `${VERSION}-donnees`;
 

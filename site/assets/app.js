@@ -155,7 +155,7 @@
       b.addEventListener("click", () => {
         choisirCouche(c.id);
         // Sur téléphone, on referme le panneau pour montrer la carte tout de suite.
-        if (window.matchMedia("(max-width: 820px)").matches) $("rail").classList.remove("ouvert");
+        if (window.matchMedia("(max-width: 820px)").matches) fermerRail();
       });
       box.appendChild(b);
     });
@@ -172,6 +172,7 @@
     document.querySelectorAll(".couche").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.id === id)));
     viderCalques();
     etat.couche = c;
+    $("rail-ouvrir-couche").textContent = c.gibs || c.modele ? "· " + c.nom : "";
     if (c.modele) { choisirModele(c); return; }
     if (!c.gibs) { $("temps").hidden = true; majLegende(); majGlobeDonnees(); return; }
     choisirGibs(c);
@@ -372,7 +373,7 @@
     if (f.couche && COUCHES.some((c) => c.id === f.couche)) {
       const act = document.createElement("div"); act.className = "fiche-actions";
       const b = document.createElement("button"); b.type = "button"; b.className = "btn"; b.textContent = "Voir sur la carte";
-      b.addEventListener("click", () => { d.close(); if (vueGlobe()) fermerGlobe(); choisirCouche(f.couche); $("rail").classList.remove("ouvert"); });
+      b.addEventListener("click", () => { d.close(); if (vueGlobe()) fermerGlobe(); choisirCouche(f.couche); fermerRail(); });
       act.appendChild(b); corps.appendChild(act);
     }
     if (typeof d.showModal === "function") d.showModal(); else d.setAttribute("open", "");
@@ -383,6 +384,9 @@
   });
   $("fiche-fermer").addEventListener("click", () => $("fiche").close());
   $("fiche").addEventListener("click", (e) => { if (e.target === $("fiche")) $("fiche").close(); });
+
+  function ouvrirRail() { $("rail").classList.add("ouvert"); $("rail-ouvrir").setAttribute("aria-expanded", "true"); }
+  function fermerRail() { $("rail").classList.remove("ouvert"); $("rail-ouvrir").setAttribute("aria-expanded", "false"); }
 
   /* ================= Légende ================= */
   function blocDegrade(titre, stops, unite, texte) {
@@ -423,8 +427,35 @@
       blocs.push(`<div class="legende-bloc"><p>Flèches de vent et cartes d'épisodes : visibles en vue Carte.</p></div>`);
     episodesActifs().forEach((e) => blocs.push(blocDegrade(`${e.episode} · ${e.titre}`,
       e.legende, e.unite, "Carte issue de l'Atlas ENSO (ERA5, normale 1991-2020).")));
-    $("legende").innerHTML = blocs.join("");
+    const html = blocs.join("");
+    if (html === legende.html) return;            // contenu inchangé (rafraîchissement périodique) : on ne le réaffiche pas
+    legende.html = html;
+    $("legende").innerHTML = html ? html + `<button type="button" class="legende-fermer" data-legende-fermer>Masquer la légende</button>` : "";
+    montrerLegende();
   }
+
+  /* La légende se superpose à la carte puis se replie seule après quelques secondes (sauf si on la survole ou
+     l'utilise) ; la puce « Légende » la rouvre. */
+  const legende = { html: null, minuteur: null };
+  const DELAI_LEGENDE = 4500;
+  function replierLegende() {
+    clearTimeout(legende.minuteur);
+    $("legende").classList.add("repliee");
+    $("legende-puce").hidden = !legende.html;
+  }
+  function montrerLegende(delai = DELAI_LEGENDE) {
+    clearTimeout(legende.minuteur);
+    $("legende").classList.remove("repliee");
+    $("legende-puce").hidden = true;
+    if (legende.html) legende.minuteur = setTimeout(replierLegende, delai);
+  }
+  $("legende-puce").addEventListener("click", () => montrerLegende(8000));
+  $("legende").addEventListener("click", (e) => { if (e.target.closest("[data-legende-fermer]")) replierLegende(); });
+  $("legende").addEventListener("pointerenter", () => clearTimeout(legende.minuteur));
+  const legendeOuverte = () => !$("legende").classList.contains("repliee");
+  $("legende").addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse" && legendeOuverte()) montrerLegende(); });
+  $("legende").addEventListener("pointerdown", (e) => { if (!e.target.closest("[data-legende-fermer]")) montrerLegende(8000); });
+  $("legende").addEventListener("focusin", () => clearTimeout(legende.minuteur));
 
   /* ================= Vent prévu (Open-Meteo) ================= */
   const ECHELLE_VENT = [["< 10", "#cfe6ee"], ["10-20", "#8fd0e0"], ["20-30", "#f2d06b"], ["30-40", "#f29a4a"], ["40 +", "#e5484d"]];
@@ -1061,9 +1092,13 @@
     m.addLayer({ id: "cyc", type: "line", source: "cyc", paint: { "line-color": ["get", "c"], "line-width": 3 } });
   }
 
-  /* ================= Téléphone ================= */
-  $("rail-ouvrir").addEventListener("click", () => $("rail").classList.add("ouvert"));
-  $("rail-fermer").addEventListener("click", () => $("rail").classList.remove("ouvert"));
+  /* ================= Panneau des couches (rétractable, ordinateur et téléphone) ================= */
+  $("rail-ouvrir").addEventListener("click", () => ($("rail").classList.contains("ouvert") ? fermerRail() : ouvrirRail()));
+  $("rail-fermer").addEventListener("click", fermerRail);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && $("rail").classList.contains("ouvert")) fermerRail(); });
+  carte.on("mousedown touchstart", () => { if ($("rail").classList.contains("ouvert")) fermerRail(); });
+  /* L'astuce s'efface d'elle-même. */
+  setTimeout(() => { $("astuce").classList.add("efface"); setTimeout(() => { $("astuce").hidden = true; }, 500); }, 7000);
 
   /* ================= Démarrage ================= */
   construireBoutons();
