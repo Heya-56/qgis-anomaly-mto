@@ -57,8 +57,8 @@ async function avecCache(request, ctx, cle, dureeS, produire) {
 }
 
 /* Invests tropicaux : bulletin opérationnel JTWC de l'hémisphère Sud.
-   Le bulletin liste les perturbations surveillées, dont les systèmes P (Pacifique Sud)
-   et S (sud-ouest de l'océan Indien). On ne les confond pas avec les cyclones nommés. */
+   Le bulletin ABPW liste les perturbations surveillées du Pacifique Sud (systèmes P).
+   On ne les confond pas avec les cyclones nommés. */
 const JTWC_INVESTS = "https://www.metoc.navy.mil/jtwc/products/abpwweb.txt";
 function coordInvest(texte) {
   const re = /(?:LOCATED NEAR|POSITION(?:ED)? NEAR)\\s+(\\d{1,2}(?:\\.\\d+)?)\\s*([NS])\\s+(\\d{1,3}(?:\\.\\d+)?)\\s*([EW])/gi;
