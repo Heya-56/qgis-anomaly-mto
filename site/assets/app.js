@@ -422,7 +422,8 @@
         .map(([s, col]) => `<span><i style="background:${col}"></i>${s}</span>`).join("")}</div>
         <p>Flèche = direction vers laquelle souffle le vent.</p></div>`);
     }
-    if ($("opt-actifs").checked) blocs.push(blocActifs());\n    if ($("opt-invests").checked) blocs.push(blocInvests());
+    if ($("opt-actifs").checked) blocs.push(blocActifs());
+    if ($("opt-invests").checked) blocs.push(blocInvests());
     if (vueGlobe() && ($("opt-vent").checked || episodesActifs().length))
       blocs.push(`<div class="legende-bloc"><p>Flèches de vent et cartes d'épisodes : visibles en vue Carte.</p></div>`);
     episodesActifs().forEach((e) => blocs.push(blocDegrade(`${e.episode} · ${e.titre}`,
