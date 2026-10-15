@@ -374,7 +374,8 @@ async function gibsDispo(url) {
 }
 
 const ROUTES = {
-  "/api/cyclones-actifs": { duree: 900, produire: cyclonesActifs },\n  "/api/investissements-actifs": { duree: 900, produire: investissementsActifs },
+  "/api/cyclones-actifs": { duree: 900, produire: cyclonesActifs },
+  "/api/investissements-actifs": { duree: 900, produire: investissementsActifs },
   "/api/enso-type": { duree: 43200, produire: ensoType },
   "/api/mjo": { duree: 21600, produire: mjo }
 };
