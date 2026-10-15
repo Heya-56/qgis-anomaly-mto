@@ -61,7 +61,7 @@ async function avecCache(request, ctx, cle, dureeS, produire) {
    On ne les confond pas avec les cyclones nommés. */
 const JTWC_INVESTS = "https://www.metoc.navy.mil/jtwc/products/abpwweb.txt";
 function coordInvest(texte) {
-  const re = /(?:LOCATED NEAR|POSITION(?:ED)? NEAR)\\s+(\\d{1,2}(?:\\.\\d+)?)\\s*([NS])\\s+(\\d{1,3}(?:\\.\\d+)?)\\s*([EW])/gi;
+  const re = /(?:LOCATED NEAR|POSITION(?:ED)? NEAR)\s+(\d{1,2}(?:\.\d+)?)\s*([NS])\s+(\d{1,3}(?:\.\d+)?)\s*([EW])/gi;
   let m, dernier = null;
   while ((m = re.exec(texte))) {
     const lat = Number(m[1]) * (m[2].toUpperCase() === "S" ? -1 : 1);
@@ -83,7 +83,7 @@ async function investissementsActifs() {
   if (!/SIGNIFICANT TROPICAL WEATHER ADVISORY|ABPW/i.test(texte) || texte.length < 100) {
     return repondre({ erreur: "Bulletin JTWC illisible" }, 502);
   }
-  const matches = [...texte.matchAll(/INVEST\\s+(9[0-9]P)\\b/gi)];
+  const matches = [...texte.matchAll(/INVEST\s+(9[0-9]P)\b/gi)];
   const ids = [...new Set(matches.map((m) => m[1].toUpperCase()))];
   const investissements = [];
   for (const id of ids) {
