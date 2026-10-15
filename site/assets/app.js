@@ -422,7 +422,7 @@
         .map(([s, col]) => `<span><i style="background:${col}"></i>${s}</span>`).join("")}</div>
         <p>Flèche = direction vers laquelle souffle le vent.</p></div>`);
     }
-    if ($("opt-actifs").checked) blocs.push(blocActifs());
+    if ($("opt-actifs").checked) blocs.push(blocActifs());\n    if ($("opt-invests").checked) blocs.push(blocInvests());
     if (vueGlobe() && ($("opt-vent").checked || episodesActifs().length))
       blocs.push(`<div class="legende-bloc"><p>Flèches de vent et cartes d'épisodes : visibles en vue Carte.</p></div>`);
     episodesActifs().forEach((e) => blocs.push(blocDegrade(`${e.episode} · ${e.titre}`,
@@ -898,6 +898,7 @@
   const COUL_ALERTE = { Green: "#5cc98a", Orange: "#f29a4a", Red: "#e5484d" };
   const COUL_ZONE = { Poly_Green: "#5cc98a", Poly_Orange: "#f29a4a", Poly_Red: "#e5484d" };
   const actifs = { groupe: L.layerGroup(), donnees: null, erreur: null };
+  const invests = { groupe: L.layerGroup(), donnees: null, erreur: null };
   const kmhVersKt = (v) => Math.round(v / 1.852);
 
   function svgCyclone(couleur, sud) {
@@ -950,8 +951,38 @@
     dessinerActifs(); majLegende(); majGlobeActifs();
   });
 
+  async function chargerInvests() {
+    try { invests.donnees = await lireJson("api/investissements-actifs"); invests.erreur = null; }
+    catch (e) { invests.donnees = null; invests.erreur = e; }
+    dessinerInvests(); majLegende(); majGlobeInvests();
+  }
+  function dessinerInvests() {
+    invests.groupe.clearLayers();
+    if (!$("opt-invests").checked || !invests.donnees) return;
+    (invests.donnees.investissements || []).forEach((x) => {
+      if (!x.position || x.position.length < 2) return;
+      const [lon, lat] = x.position;
+      L.circleMarker([lat, pac(lon)], { radius: 7, color: "#0b1216", weight: 2, fillColor: "#59d7e8", fillOpacity: 1 })
+        .bindTooltip(x.id, { permanent: true, direction: "right", offset: [8, 0], className: "invest-nom" })
+        .bindPopup(`<strong>${x.nom}</strong><br>Position : ${Math.abs(lat).toFixed(1)}°${lat < 0 ? "S" : "N"}, ${Math.abs(lon).toFixed(1)}°${lon < 0 ? "W" : "E"}<br>Source : JTWC ABPW<br><a href="${x.bulletin}" target="_blank" rel="noopener">Bulletin officiel JTWC</a>`)
+        .addTo(invests.groupe);
+    });
+  }
+  function blocInvests() {
+    if (invests.erreur) return `<div class="legende-bloc"><strong>Invests tropicaux</strong><p>Bulletin JTWC momentanément indisponible. Les positions ne sont pas supposées nulles.</p></div>`;
+    if (!invests.donnees) return "";
+    const liste = invests.donnees.investissements || [];
+    if (!liste.length) return `<div class="legende-bloc"><strong>Invests tropicaux</strong><p>Aucun invest avec position exploitable dans le dernier bulletin JTWC.</p></div>`;
+    return `<div class="legende-bloc"><strong>Invests tropicaux (${liste.length})</strong><p>${liste.map((x) => x.id).join(" · ")} · Source : JTWC ABPW</p></div>`;
+  }
+  $("opt-invests").addEventListener("change", (e) => {
+    if (e.target.checked) { invests.groupe.addTo(carte); if (!invests.donnees) chargerInvests(); }
+    else carte.removeLayer(invests.groupe);
+    dessinerInvests(); majLegende(); majGlobeInvests();
+  });
+
   /* ================= Vue globe 3D (MapLibre) ================= */
-  const globe = { map: null, pret: false, lieux: [], actifs: [], noms: [] };
+  const globe = { map: null, pret: false, lieux: [], actifs: [], invests: [], noms: [] };
   const vueGlobe = () => !$("globe").hidden;
   function urlWms(couche, format, temps) {
     return `${SRC.gibsWms}?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=${couche}&STYLES=&FORMAT=${encodeURIComponent(format)}` +
@@ -1071,6 +1102,16 @@
       globe.actifs.push(marqueurTexte(`<span class="nom-cyclone actif-nom">${libelleActif(c)}</span>`, c.position, "globe-etiquette"));
     });
   }
+  function majGlobeInvests() {
+    if (!globe.pret) return;
+    globe.invests.forEach((x) => x.remove()); globe.invests = [];
+    if (!$("opt-invests").checked || !invests.donnees) return;
+    (invests.donnees.investissements || []).forEach((x) => {
+      if (!x.position) return;
+      globe.invests.push(marqueurTexte('<span class="invest-nom">' + x.id + '</span>', x.position, "globe-etiquette"));
+    });
+  }
+
   function majGlobeCyclones() {
     if (!globe.pret) return;
     const m = globe.map;
