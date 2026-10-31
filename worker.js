@@ -56,6 +56,48 @@ async function avecCache(request, ctx, cle, dureeS, produire) {
   return reponse;
 }
 
+/* Invests tropicaux : bulletin opérationnel JTWC de l'hémisphère Sud.
+   Le bulletin ABPW liste les perturbations surveillées du Pacifique Sud (systèmes P).
+   On ne les confond pas avec les cyclones nommés. */
+const JTWC_INVESTS = "https://www.metoc.navy.mil/jtwc/products/abpwweb.txt";
+function coordInvest(texte) {
+  const re = /(?:LOCATED NEAR|POSITION(?:ED)? NEAR)\s+(\d{1,2}(?:\.\d+)?)\s*([NS])\s+(\d{1,3}(?:\.\d+)?)\s*([EW])/gi;
+  let m, dernier = null;
+  while ((m = re.exec(texte))) {
+    const lat = Number(m[1]) * (m[2].toUpperCase() === "S" ? -1 : 1);
+    const lon = Number(m[3]) * (m[4].toUpperCase() === "W" ? -1 : 1);
+    if (Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
+      dernier = { position: [lon, lat], mention: m[0] };
+      if (/NOW LOCATED NEAR|IS NOW LOCATED NEAR/i.test(texte.slice(Math.max(0, m.index - 12), m.index + m[0].length))) return dernier;
+    }
+  }
+  return dernier;
+}
+async function investissementsActifs() {
+  let texte;
+  try {
+    const r = await fetch(JTWC_INVESTS, { headers: { accept: "text/plain" }, cf: { cacheTtl: 900 } });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    texte = await r.text();
+  } catch (e) { return repondre({ erreur: "Bulletin JTWC indisponible" }, 502); }
+  if (!/SIGNIFICANT TROPICAL WEATHER ADVISORY|ABPW/i.test(texte) || texte.length < 100) {
+    return repondre({ erreur: "Bulletin JTWC illisible" }, 502);
+  }
+  const matches = [...texte.matchAll(/INVEST\s+(9[0-9]P)\b/gi)];
+  const ids = [...new Set(matches.map((m) => m[1].toUpperCase()))];
+  const investissements = [];
+  for (const id of ids) {
+    const pos = matches.find((m) => m[1].toUpperCase() === id);
+    const debut = pos.index;
+    const fin = matches.find((m) => m.index > debut && m[1].toUpperCase() !== id)?.index ?? Math.min(texte.length, debut + 1800);
+    const section = texte.slice(Math.max(0, debut - 100), Math.min(texte.length, fin + 100));
+    const coord = coordInvest(section);
+    if (!coord) continue;
+    investissements.push({ id, nom: `Invest ${id}`, position: coord.position, source: "JTWC ABPW", bulletin: "https://www.metoc.navy.mil/jtwc/jtwc.html" });
+  }
+  return repondre({ source: "JTWC — Significant Tropical Weather Advisory (ABPW)", bassin: "Pacifique Sud (systèmes P)", mise_a_jour: new Date().toISOString(), investissements });
+}
+
 async function cyclonesActifs() {
   let liste;
   try { liste = await lireJson(GDACS_LISTE); }
@@ -333,6 +375,7 @@ async function gibsDispo(url) {
 
 const ROUTES = {
   "/api/cyclones-actifs": { duree: 900, produire: cyclonesActifs },
+  "/api/investissements-actifs": { duree: 900, produire: investissementsActifs },
   "/api/enso-type": { duree: 43200, produire: ensoType },
   "/api/mjo": { duree: 21600, produire: mjo }
 };

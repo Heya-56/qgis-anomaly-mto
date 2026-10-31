@@ -99,6 +99,20 @@ test("Worker : cyclones en cours filtrés sur 48 h et textes nettoyés", async (
   assert.equal(j.cyclones[0].rapport, "");
 });
 
+test("Worker : invests JTWC extraits avec leur position actuelle", async () => {
+  globalThis.fetch = async () => new Response(`ABPW10 PGTW 140600
+SIGNIFICANT TROPICAL WEATHER ADVISORY FOR THE SOUTH PACIFIC
+(1) AREA OF CONVECTION (INVEST 92P) PREVIOUSLY LOCATED NEAR 17.9S 170.6W
+IS NOW LOCATED NEAR 15.4S 172.0W. DEVELOPMENT POTENTIAL LOW.
+`);
+  const r = await appel("/api/investissements-actifs");
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.equal(j.investissements.length, 1);
+  assert.equal(j.investissements[0].id, "92P");
+  assert.deepEqual(j.investissements[0].position, [-172, -15.4]);
+});
+
 test("Worker : MJO convertie en phase RMM", async () => {
   globalThis.fetch = async () => new Response("2026  9 20  0     -1.00000     0.10000     1.00500\n");
   const j = await (await appel("/api/mjo")).json();
